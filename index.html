@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRINDING · Shop-Floor Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#12161B; --bg-1:#1A2027; --bg-2:#232B34; --bg-3:#2C3742;
+    --line:#333F4B; --line-soft:#28313A;
+    --tx:#E6EDF3; --tx-dim:#94A3B2; --tx-faint:#5F6E7C;
+    --run:#3FB950; --idle:#E3A008; --down:#F0524A; --cool:#38BDCE;
+    --run-bg:rgba(63,185,80,.12); --idle-bg:rgba(227,160,8,.12);
+    --down-bg:rgba(240,82,74,.12); --cool-bg:rgba(56,189,206,.12);
+    --disp:'Saira Condensed',sans-serif; --body:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+    --r:10px; --r-sm:6px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg-0);color:var(--tx);font-family:var(--body);font-size:14px;line-height:1.5;
+    background-image:radial-gradient(circle at 88% -5%,rgba(56,189,206,.06),transparent 45%);min-height:100vh}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--cool);color:#04181C}
+
+  .app{display:grid;grid-template-columns:212px 1fr;min-height:100vh}
+  .sidebar{background:var(--bg-1);border-right:1px solid var(--line);display:flex;flex-direction:column;
+    position:sticky;top:0;height:100vh}
+  .brand{padding:20px 18px 16px;border-bottom:1px solid var(--line-soft)}
+  .brand .mark{display:flex;align-items:center;gap:9px}
+  .brand .disc{width:26px;height:26px;border-radius:50%;background:
+    repeating-conic-gradient(from 0deg,#3a4652 0deg 12deg,#4c5a68 12deg 24deg);
+    border:2px solid #5a6a78;box-shadow:inset 0 0 0 3px var(--bg-1)}
+  .brand h1{font-family:var(--disp);font-weight:700;font-size:19px;letter-spacing:.06em;line-height:1}
+  .brand .sub{font-family:var(--mono);font-size:10px;color:var(--tx-faint);letter-spacing:.18em;margin-top:5px;text-transform:uppercase}
+
+  .nav{padding:12px 10px;flex:1}
+  .nav .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--tx-faint);
+    text-transform:uppercase;padding:8px 10px 6px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:var(--r-sm);
+    color:var(--tx-dim);font-weight:500;cursor:pointer;margin-bottom:2px;transition:.15s;position:relative}
+  .nav a .ic{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7}
+  .nav a:hover{background:var(--bg-2);color:var(--tx)}
+  .nav a.on{background:var(--cool-bg);color:var(--tx)}
+  .nav a.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--cool)}
+  .shiftbox{margin:10px;padding:12px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:var(--r)}
+  .shiftbox .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;color:var(--tx-faint);text-transform:uppercase}
+  .shiftbox .v{font-family:var(--disp);font-size:24px;font-weight:600;letter-spacing:.04em;margin-top:2px}
+  .shiftbox .lead{font-size:12px;color:var(--tx-dim);margin-top:4px}
+
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:16px 26px;border-bottom:1px solid var(--line);background:rgba(18,22,27,.72);
+    backdrop-filter:blur(8px);position:sticky;top:0;z-index:20}
+  .topbar .ttl{font-family:var(--disp);font-size:23px;font-weight:600;letter-spacing:.04em}
+  .topbar .ttl small{display:block;font-family:var(--body);font-size:11.5px;font-weight:400;
+    color:var(--tx-dim);letter-spacing:0;margin-top:1px}
+  .topright{display:flex;align-items:center;gap:18px}
+  .conn{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 10px;border-radius:20px;display:flex;align-items:center;gap:6px}
+  .conn .dot{width:6px;height:6px;border-radius:50%}
+  .conn.live{background:var(--run-bg);color:var(--run)} .conn.live .dot{background:var(--run);box-shadow:0 0 6px var(--run)}
+  .conn.demo{background:var(--idle-bg);color:var(--idle)} .conn.demo .dot{background:var(--idle)}
+  .clock{font-family:var(--mono);text-align:right}
+  .clock .t{font-size:19px;font-weight:500;letter-spacing:.04em}
+  .clock .d{font-size:11px;color:var(--tx-dim);margin-top:1px}
+  .view{padding:22px 26px 40px;flex:1}
+  .view[hidden]{display:none}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+  .kpi{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;position:relative;overflow:hidden}
+  .kpi .k{font-family:var(--mono);font-size:10px;letter-spacing:.13em;color:var(--tx-dim);text-transform:uppercase}
+  .kpi .v{font-family:var(--disp);font-size:34px;font-weight:600;line-height:1.05;margin-top:8px;letter-spacing:.02em}
+  .kpi .v small{font-size:16px;color:var(--tx-dim);font-weight:500}
+  .kpi .meta{font-family:var(--mono);font-size:11px;margin-top:6px;color:var(--tx-dim)}
+  .kpi .bar{height:4px;border-radius:3px;background:var(--bg-3);margin-top:11px;overflow:hidden}
+  .kpi .bar i{display:block;height:100%;border-radius:3px}
+  .up{color:var(--run)} .warn{color:var(--idle)} .bad{color:var(--down)}
+
+  .grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start}
+  .panel{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .panel > h2{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    padding:14px 16px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between}
+  .panel > h2 .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tx-faint);font-weight:400}
+
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;padding:16px}
+  .mcard{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:var(--r);padding:14px;
+    display:flex;flex-direction:column;align-items:center;text-align:center;transition:.15s}
+  .mcard:hover{border-color:var(--line);transform:translateY(-1px)}
+  .mcard .code{font-family:var(--disp);font-size:17px;font-weight:600;letter-spacing:.05em}
+  .mcard .type{font-family:var(--mono);font-size:9.5px;color:var(--tx-faint);letter-spacing:.12em;text-transform:uppercase;margin-top:1px}
+  .dial{margin:11px 0 6px;position:relative}
+  .dial .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .dial .num b{font-family:var(--mono);font-size:20px;font-weight:600;line-height:1}
+  .dial .num span{font-family:var(--mono);font-size:8.5px;color:var(--tx-faint);letter-spacing:.14em;margin-top:2px}
+  .job{font-size:11px;color:var(--tx-dim);margin-top:2px;min-height:16px}
+  .job b{color:var(--tx);font-family:var(--mono);font-weight:500}
+  .st{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;
+    letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-top:10px;font-weight:500}
+  .st .dot{width:6px;height:6px;border-radius:50%}
+  .st.running{background:var(--run-bg);color:var(--run)} .st.running .dot{background:var(--run);box-shadow:0 0 7px var(--run)}
+  .st.idle{background:var(--idle-bg);color:var(--idle)} .st.idle .dot{background:var(--idle)}
+  .st.down{background:var(--down-bg);color:var(--down)} .st.down .dot{background:var(--down);animation:blink 1s steps(2) infinite}
+  .st.maintenance{background:var(--cool-bg);color:var(--cool)} .st.maintenance .dot{background:var(--cool)}
+  @keyframes blink{50%{opacity:.25}}
+
+  .pareto{padding:16px}
+  .prow{display:grid;grid-template-columns:110px 1fr 52px;align-items:center;gap:10px;margin-bottom:11px}
+  .prow .nm{font-size:12px;color:var(--tx-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow .track{height:15px;background:var(--bg-3);border-radius:4px;overflow:hidden}
+  .prow .track i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#e3a008,#f0524a)}
+  .prow .val{font-family:var(--mono);font-size:11px;text-align:right;color:var(--tx-dim)}
+  .prow:first-child .track i{background:linear-gradient(90deg,#f0524a,#ff7a5c)}
+  .wip{border-top:1px solid var(--line-soft);padding:14px 16px}
+  .wipbar{display:flex;gap:6px;align-items:flex-end;height:70px;margin-top:12px}
+  .wipbar .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .wipbar .col .b{width:100%;border-radius:4px 4px 0 0;background:var(--bg-3);position:relative;transition:.2s}
+  .wipbar .col.hot .b{background:linear-gradient(180deg,var(--down),#8a2b26)}
+  .wipbar .col .b span{position:absolute;top:-16px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:var(--tx-dim)}
+  .wipbar .col .lb{font-family:var(--mono);font-size:9.5px;color:var(--tx-faint);letter-spacing:.05em}
+
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .col{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);min-height:340px;display:flex;flex-direction:column}
+  .col.drop{border-color:var(--cool);box-shadow:inset 0 0 0 1px var(--cool)}
+  .col > h3{font-family:var(--disp);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    padding:12px 13px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center}
+  .col > h3 .cnt{font-family:var(--mono);font-size:11px;background:var(--bg-3);color:var(--tx-dim);
+    padding:1px 8px;border-radius:20px;font-weight:400}
+  .col .stack{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
+  .card{background:var(--bg-2);border:1px solid var(--line-soft);border-left:3px solid var(--cool);
+    border-radius:var(--r-sm);padding:11px;cursor:grab;transition:.13s}
+  .card:hover{border-color:var(--line);background:var(--bg-3)}
+  .card.dragging{opacity:.4}
+  .card.p1{border-left-color:var(--down)} .card.p2{border-left-color:var(--idle)} .card.p3{border-left-color:var(--cool)}
+  .card .top{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+  .card .wo{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.03em}
+  .card .pri{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 6px;border-radius:4px;text-transform:uppercase}
+  .card.p1 .pri{background:var(--down-bg);color:var(--down)} .card.p2 .pri{background:var(--idle-bg);color:var(--idle)}
+  .card.p3 .pri{background:var(--cool-bg);color:var(--cool)}
+  .card .part{font-size:12px;color:var(--tx);margin-top:5px}
+  .card .part b{font-family:var(--mono)}
+  .card .row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
+    font-family:var(--mono);font-size:10.5px;color:var(--tx-dim)}
+  .card .row .due.late{color:var(--down)}
+  .card .who{display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+  .card .who .av{width:20px;height:20px;border-radius:50%;background:var(--bg-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:var(--cool)}
+  .card .who .nm{font-size:11px;color:var(--tx-dim)}
+  .card .who .mc{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--tx-faint)}
+  .card .mv{display:flex;gap:6px;margin-top:9px}
+  .card .mv button{flex:1;background:var(--bg-1);border:1px solid var(--line);color:var(--tx-dim);
+    border-radius:var(--r-sm);padding:5px;font-family:var(--mono);font-size:11px;cursor:pointer;transition:.13s}
+  .card .mv button:hover{background:var(--cool-bg);color:var(--cool);border-color:var(--cool)}
+  .card .mv button:disabled{opacity:.3;cursor:not-allowed}
+
+  .tbl{width:100%;border-collapse:collapse}
+  .tbl th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx-faint);
+    text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);font-weight:500}
+  .tbl td{padding:12px 14px;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tr:hover td{background:var(--bg-2)}
+  .who2{display:flex;align-items:center;gap:10px}
+  .who2 .av{width:30px;height:30px;border-radius:50%;background:var(--bg-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--cool);flex:none}
+  .who2 .nm{font-weight:500} .who2 .rl{font-family:var(--mono);font-size:10.5px;color:var(--tx-dim)}
+  .rolechip{font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:3px 9px;border-radius:5px;
+    background:var(--bg-3);color:var(--tx-dim);text-transform:uppercase}
+  .rolechip.lead{background:var(--cool-bg);color:var(--cool)}
+  .rolechip.shift{background:var(--idle-bg);color:var(--idle)}
+
+  .skill{display:inline-flex;width:26px;height:26px;border-radius:6px;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;font-weight:600}
+  .sk0{background:var(--bg-3);color:var(--tx-faint)}
+  .sk1{background:rgba(227,160,8,.16);color:var(--idle)}
+  .sk2{background:rgba(56,189,206,.16);color:var(--cool)}
+  .sk3{background:rgba(63,185,80,.18);color:var(--run)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid var(--line-soft);
+    font-family:var(--mono);font-size:11px;color:var(--tx-dim)}
+  .legend span{display:flex;align-items:center;gap:7px}
+  .warnflag{font-family:var(--mono);font-size:10px;color:var(--down);background:var(--down-bg);
+    padding:2px 7px;border-radius:5px;margin-left:8px}
+
+  .mb18{margin-bottom:18px}
+  .hint{font-size:12px;color:var(--tx-dim);margin-top:14px;font-family:var(--mono);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .hint .k{background:var(--bg-2);border:1px solid var(--line);border-radius:4px;padding:1px 7px;color:var(--tx)}
+
+  @media(max-width:1100px){
+    .board{grid-template-columns:repeat(3,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:720px){
+    .app{grid-template-columns:1fr}
+    .sidebar{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
+    .brand{border-bottom:none;border-right:1px solid var(--line-soft);flex:1}
+    .nav{display:flex;flex-wrap:wrap;padding:8px;width:100%;order:3;gap:4px}
+    .nav .lbl,.shiftbox{display:none}
+    .nav a{margin:0;padding:8px 12px}
+    .board{grid-template-columns:1fr}
+    .view{padding:16px}
+    .topbar{padding:13px 16px}
+    .topright{gap:10px}
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">
+        <div class="disc"></div>
+        <div><h1>GRINDING</h1><div class="sub">Shop-Floor Console</div></div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="lbl">Operations</div>
+      <a data-v="overview" class="on"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Control Room</a>
+      <a data-v="dispatch"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="10"/><rect x="17" y="4" width="4" height="13"/></svg>Dispatch Board</a>
+      <div class="lbl">Resources</div>
+      <a data-v="machines"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Machines</a>
+      <a data-v="people"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17.5 14c2.5 0 4.5 2 4.5 5"/></svg>People & Skills</a>
+    </nav>
+    <div class="shiftbox">
+      <div class="k">Active Shift</div>
+      <div class="v">A · 06–14</div>
+      <div class="lead">หัวหน้ากะ: สมชาย จ.</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="ttl" id="viewTitle">Control Room<small>ภาพรวมการผลิตแบบเรียลไทม์ · แผนกเจียร</small></div>
+      <div class="topright">
+        <div class="conn demo" id="conn"><span class="dot"></span><span id="connTxt">connecting…</span></div>
+        <div class="clock"><div class="t" id="clk">--:--:--</div><div class="d" id="dte"></div></div>
+      </div>
+    </header>
+
+    <section class="view" id="v-overview">
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>สถานะเครื่องจักร <span class="tag" id="mSummary"></span></h2>
+          <div class="mgrid" id="machineGrid"></div>
+        </div>
+        <div>
+          <div class="panel mb18">
+            <h2>คอขวด · Downtime Pareto <span class="tag">กะปัจจุบัน</span></h2>
+            <div class="pareto" id="paretoBox"></div>
+          </div>
+          <div class="panel">
+            <h2>คิวงานหน้าเครื่อง (WIP) <span class="tag">จำนวนงานรอ</span></h2>
+            <div class="wip"><div class="wipbar" id="wipBar"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-dispatch" hidden>
+      <div class="board" id="board"></div>
+      <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
+    </section>
+
+    <section class="view" id="v-machines" hidden>
+      <div class="panel">
+        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span></h2>
+        <table class="tbl" id="machineTbl">
+          <thead><tr><th>เครื่อง</th><th>ประเภท</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="view" id="v-people" hidden>
+      <div class="panel mb18">
+        <h2>บุคลากรในแผนก <span class="tag">กะ A</span></h2>
+        <table class="tbl" id="peopleTbl">
+          <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>กะ</th><th>งานที่ถืออยู่</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Skill Matrix <span class="tag">ระดับความชำนาญต่อประเภทเครื่อง</span></h2>
+        <table class="tbl" id="skillTbl"><thead></thead><tbody></tbody></table>
+        <div class="legend">
+          <span><b class="skill sk0">0</b> ทำไม่ได้</span>
+          <span><b class="skill sk1">1</b> ทำได้ (มีคนคุม)</span>
+          <span><b class="skill sk2">2</b> ทำเองได้</span>
+          <span><b class="skill sk3">3</b> สอนได้</span>
+          <span><b class="warnflag">เดี่ยว</b> มีคนทำได้คนเดียว (เสี่ยง)</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ====== ตั้งค่า Supabase (เอาจาก Supabase → Project Settings → API) ======
+   ปล่อยว่างทั้งคู่ = โหมด demo (ข้อมูลตัวอย่าง ไม่บันทึก)
+   anon key เปิดเผยในหน้าเว็บได้ตามปกติ — ความปลอดภัยควบคุมด้วย RLS policy ที่ Supabase */
+window.SUPABASE_URL = "https://ertjwvwqszylrylhdjum.supabase.co";
+window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVydGp3dndxc3p5bHJ5bGhkanVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDY5NjYsImV4cCI6MjEwMTMyMjk2Nn0.OiDj0kqh0KAdUSjZfxpTy7R0Kyxp3dgIA84sU42cJQk";
+</script>
+<script>
+const sb = (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase)
+  ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
+  : null;
+
+/* ---------------- Demo fallback (used if API unreachable) ---------------- */
+const FALLBACK = {
+  kpis:{output:330,target:850,avg_oee:68,oee_target:72,on_time:88,scrap:2.4},
+  machines:[
+    {code:'CG-01',type:'Cylindrical',status:'running',oee:82,oee_target:72,job:'SHF-1180',operator:'ณัฐยา'},
+    {code:'CG-02',type:'Cylindrical',status:'down',oee:44,oee_target:72,job:null,operator:'—'},
+    {code:'CL-01',type:'Centerless',status:'running',oee:71,oee_target:72,job:'PIN-0075',operator:'ประเสริฐ'},
+    {code:'IG-01',type:'Internal',status:'maintenance',oee:69,oee_target:72,job:null,operator:'—'},
+    {code:'SG-01',type:'Surface',status:'running',oee:78,oee_target:72,job:'BRG-4420',operator:'วิชัย'},
+    {code:'SG-02',type:'Surface',status:'idle',oee:61,oee_target:72,job:null,operator:'—'},
+  ],
+  pareto:[{name:'Setup / เปลี่ยนงาน',minutes:320},{name:'Dressing หิน',minutes:180},
+    {name:'เครื่องเสีย',minutes:140},{name:'รอวัตถุดิบ',minutes:90},{name:'รอ QC',minutes:60},{name:'ไม่มีช่าง',minutes:30}],
+  wip:[{machine:'CG-01',count:1},{machine:'CG-02',count:1},{machine:'CL-01',count:1},
+    {machine:'IG-01',count:0},{machine:'SG-01',count:1},{machine:'SG-02',count:1}],
+  jobs:[
+    {id:'j1',wo:'WO-5526',part:'SPN-3300',qty:40,due:'เลยกำหนด',late:true,priority:1,machine:'—',operator:'—',stage:'queued'},
+    {id:'j2',wo:'WO-5521',part:'BRG-4420',qty:120,due:'วันนี้ 14:00',late:false,priority:1,machine:'SG-01',operator:'วิชัย',stage:'running'},
+    {id:'j3',wo:'WO-5522',part:'SHF-1180',qty:80,due:'วันนี้ 18:00',late:false,priority:2,machine:'CG-01',operator:'ณัฐยา',stage:'running'},
+    {id:'j4',wo:'WO-5524',part:'BSH-2210',qty:60,due:'วันนี้ 20:00',late:false,priority:2,machine:'CG-02',operator:'—',stage:'setup'},
+    {id:'j5',wo:'WO-5519',part:'GER-7788',qty:110,due:'เลยกำหนด',late:false,priority:2,machine:'IG-01',operator:'อนันต์',stage:'done'},
+    {id:'j6',wo:'WO-5523',part:'PIN-0075',qty:200,due:'พรุ่งนี้ 09:00',late:false,priority:3,machine:'CL-01',operator:'ประเสริฐ',stage:'inspection'},
+    {id:'j7',wo:'WO-5525',part:'RNG-0910',qty:150,due:'พรุ่งนี้ 12:00',late:false,priority:3,machine:'SG-02',operator:'กิตติ',stage:'queued'},
+    {id:'j8',wo:'WO-5527',part:'CAM-1450',qty:90,due:'พรุ่งนี้ 08:00',late:false,priority:3,machine:'—',operator:'—',stage:'queued'},
+  ],
+  people:[
+    {full_name:'สมชาย จันทร์ดี',role:'shift_leader',shift:'A',holds:'—'},
+    {full_name:'อนันต์ ศรีสุข',role:'lead_technician',shift:'A',holds:'WO-5519 @ IG-01'},
+    {full_name:'วิชัย ทองมา',role:'operator',shift:'A',holds:'WO-5521 @ SG-01'},
+    {full_name:'ณัฐยา พูนผล',role:'operator',shift:'A',holds:'WO-5522 @ CG-01'},
+    {full_name:'ประเสริฐ แก้วใส',role:'operator',shift:'A',holds:'WO-5523 @ CL-01'},
+    {full_name:'กิตติ วงศ์ไทย',role:'operator',shift:'A',holds:'—'},
+  ],
+  skills:{columns:['Surface','Cylindrical','Centerless','Internal'],
+    rows:[
+      {employee:'อนันต์ ศรีสุข',levels:{Surface:3,Cylindrical:3,Centerless:2,Internal:3}},
+      {employee:'วิชัย ทองมา',levels:{Surface:3,Cylindrical:2,Centerless:1,Internal:0}},
+      {employee:'ณัฐยา พูนผล',levels:{Surface:1,Cylindrical:3,Centerless:2,Internal:1}},
+      {employee:'ประเสริฐ แก้วใส',levels:{Surface:2,Cylindrical:1,Centerless:3,Internal:0}},
+      {employee:'กิตติ วงศ์ไทย',levels:{Surface:1,Cylindrical:1,Centerless:0,Internal:1}},
+    ],
+    spof:{Surface:false,Cylindrical:false,Centerless:false,Internal:true}},
+};
+
+const state = {online:false, kpis:{}, machines:[], pareto:[], wip:[], jobs:[], people:[], skills:{}};
+const STAGES=[['queued','รอจ่าย'],['setup','ตั้งเครื่อง'],['running','กำลังเจียร'],['inspection','ตรวจ'],['done','เสร็จ']];
+
+/* ---------------- helpers ---------------- */
+const $=s=>document.querySelector(s), el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
+const oeeColor=v=>v>=75?'var(--run)':v>=60?'var(--idle)':'var(--down)';
+const initials=n=>(!n||n==='—')?'–':n.trim().charAt(0);
+
+function dial(v){
+  const r=32,C=2*Math.PI*r,arc=C*0.75,frac=Math.max(0,Math.min(100,v))/100,col=oeeColor(v);
+  return `<div class="dial"><svg width="88" height="88" viewBox="0 0 88 88">
+    <circle cx="44" cy="44" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="7"
+      stroke-dasharray="${arc} ${C}" stroke-linecap="round" transform="rotate(135 44 44)"/>
+    <circle cx="44" cy="44" r="${r}" fill="none" stroke="${col}" stroke-width="7"
+      stroke-dasharray="${arc*frac} ${C}" stroke-linecap="round" transform="rotate(135 44 44)"
+      style="filter:drop-shadow(0 0 4px ${col});transition:stroke-dasharray .6s"/>
+    </svg><div class="num"><b>${v}</b><span>OEE %</span></div></div>`;
+}
+const STLABEL={running:'เดินเครื่อง',idle:'ว่าง',down:'เสีย',maintenance:'ซ่อมบำรุง'};
+
+/* ---------------- renders ---------------- */
+function renderKpis(){
+  const k=state.kpis, box=$('#kpis'); box.innerHTML='';
+  const outPct=k.target?Math.round(k.output/k.target*100):0;
+  const oeeDelta=k.avg_oee-k.oee_target;
+  const cards=[
+    {k:'Output vs Target',v:`${k.output}<small> / ${k.target}</small>`,
+      meta:`${outPct}% ของเป้ากะ`, w:outPct, col:outPct>=80?'var(--run)':'var(--idle)'},
+    {k:'Avg OEE',v:`<span class="${k.avg_oee>=k.oee_target?'up':'warn'}">${k.avg_oee}<small>%</small></span>`,
+      meta:`เป้า ${k.oee_target}% · <span class="${oeeDelta>=0?'up':'bad'}">${oeeDelta>=0?'+':''}${oeeDelta}</span>`,
+      w:k.avg_oee, col:k.avg_oee>=k.oee_target?'var(--run)':'var(--idle)'},
+    {k:'On-Time Delivery',v:`<span class="${k.on_time>=90?'up':'warn'}">${k.on_time}<small>%</small></span>`,
+      meta:`${state.jobs.filter(j=>j.late&&j.stage!=='done').length} งานเลยกำหนด`,
+      w:k.on_time, col:k.on_time>=90?'var(--run)':'var(--idle)'},
+    {k:'Scrap + Rework',v:`${k.scrap}<small>%</small>`,
+      meta:`เป้า &lt; 2.0% · <span class="warn">เฝ้าระวัง</span>`, w:Math.min(100,k.scrap*10), col:'var(--down)'},
+  ];
+  cards.forEach(c=>{
+    const d=el('div','kpi');
+    d.innerHTML=`<div class="k">${c.k}</div><div class="v">${c.v}</div>
+      <div class="meta">${c.meta}</div><div class="bar"><i style="width:${c.w}%;background:${c.col}"></i></div>`;
+    box.appendChild(d);
+  });
+}
+function renderMachineGrid(){
+  const g=$('#machineGrid');g.innerHTML='';
+  state.machines.forEach(m=>{
+    const c=el('div','mcard');
+    c.innerHTML=`<div class="code">${m.code}</div><div class="type">${m.type}</div>${dial(m.oee)}
+      <div class="job">${m.job?`<b>${m.job}</b>`:'<span style="color:var(--tx-faint)">ว่าง</span>'}</div>
+      <div class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</div>`;
+    g.appendChild(c);
+  });
+  const run=state.machines.filter(m=>m.status==='running').length;
+  $('#mSummary').textContent=`เดินเครื่อง ${run}/${state.machines.length}`;
+}
+function renderPareto(){
+  const box=$('#paretoBox');box.innerHTML='';
+  const max=Math.max(1,...state.pareto.map(p=>p.minutes));
+  state.pareto.forEach(p=>{
+    const r=el('div','prow');
+    r.innerHTML=`<div class="nm">${p.name}</div><div class="track"><i style="width:${p.minutes/max*100}%"></i></div><div class="val">${p.minutes}m</div>`;
+    box.appendChild(r);
+  });
+}
+function renderWip(){
+  const bar=$('#wipBar');bar.innerHTML='';
+  const max=Math.max(1,...state.wip.map(w=>w.count));
+  state.wip.forEach(w=>{
+    const hot=w.count===max&&max>0;
+    const col=el('div','col'+(hot?' hot':''));
+    col.innerHTML=`<div class="b" style="height:${18+w.count/max*46}px"><span>${w.count}</span></div><div class="lb">${w.machine}</div>`;
+    bar.appendChild(col);
+  });
+}
+function renderMachineTbl(){
+  const tb=$('#machineTbl tbody');tb.innerHTML='';
+  state.machines.forEach(m=>{
+    const tr=el('tr');
+    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${m.code}</td>
+      <td style="color:var(--tx-dim)">${m.type}</td>
+      <td><span class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</span></td>
+      <td style="font-family:var(--mono);color:${oeeColor(m.oee)};font-weight:600">${m.oee}%</td>
+      <td>${m.job?`<b style="font-family:var(--mono)">${m.job}</b>`:'<span style="color:var(--tx-faint)">—</span>'}</td>
+      <td style="color:var(--tx-dim)">${m.operator}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function renderPeople(){
+  const tb=$('#peopleTbl tbody');tb.innerHTML='';
+  const roleMap={dept_manager:['หัวหน้าแผนก','lead'],shift_leader:['หัวหน้ากะ','shift'],
+    lead_technician:['หัวหน้าช่าง','lead'],operator:['ช่างประจำจุด','']};
+  state.people.forEach(p=>{
+    const [rn,rc]=roleMap[p.role]||[p.role,''];const tr=el('tr');
+    tr.innerHTML=`<td><div class="who2"><div class="av">${initials(p.full_name)}</div><div class="nm">${p.full_name}</div></div></td>
+      <td><span class="rolechip ${rc}">${rn}</span></td>
+      <td style="font-family:var(--mono);color:var(--tx-dim)">${p.shift}</td>
+      <td style="color:var(--tx-dim)">${p.holds}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function renderSkills(){
+  const s=state.skills, th=$('#skillTbl thead'), tb=$('#skillTbl tbody');
+  th.innerHTML='<tr><th>ช่าง</th>'+s.columns.map(c=>`<th style="text-align:center">${c}</th>`).join('')+'</tr>';
+  tb.innerHTML='';
+  s.rows.forEach(row=>{
+    const tr=el('tr');
+    let cells=`<td><div class="who2"><div class="av">${initials(row.employee)}</div><div class="nm">${row.employee}</div></div></td>`;
+    s.columns.forEach(col=>{
+      const v=row.levels[col]||0;
+      const flag=(v>=2&&s.spof[col])?'<span class="warnflag">เดี่ยว</span>':'';
+      cells+=`<td style="text-align:center"><span class="skill sk${v}">${v}</span>${flag}</td>`;
+    });
+    tr.innerHTML=cells;tb.appendChild(tr);
+  });
+}
+function renderBoard(){
+  const board=$('#board');board.innerHTML='';
+  STAGES.forEach(([key,label])=>{
+    const jobs=state.jobs.filter(j=>j.stage===key);
+    const col=el('div','col');col.dataset.stage=key;
+    col.innerHTML=`<h3>${label}<span class="cnt">${jobs.length}</span></h3>`;
+    const stack=el('div','stack');
+    jobs.forEach(j=>{
+      const i=STAGES.findIndex(x=>x[0]===j.stage);
+      const card=el('div',`card p${j.priority}`);card.draggable=true;card.dataset.id=j.id;
+      card.innerHTML=`<div class="top"><span class="wo">${j.wo}</span><span class="pri">P${j.priority}</span></div>
+        <div class="part">Part <b>${j.part}</b> · ${j.qty} ชิ้น</div>
+        <div class="row"><span>ครบกำหนด</span><span class="due ${j.late?'late':''}">${j.due}</span></div>
+        <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.machine}</div></div>
+        <div class="mv"><button ${i===0?'disabled':''} data-mv="-1">◀</button>
+          <button ${i===STAGES.length-1?'disabled':''} data-mv="1">▶</button></div>`;
+      card.addEventListener('dragstart',e=>{e.dataTransfer.setData('id',j.id);card.classList.add('dragging');});
+      card.addEventListener('dragend',()=>card.classList.remove('dragging'));
+      card.querySelectorAll('.mv button').forEach(b=>b.addEventListener('click',()=>{
+        const ni=i+ +b.dataset.mv; if(ni>=0&&ni<STAGES.length) setStage(j.id,STAGES[ni][0]);
+      }));
+      stack.appendChild(card);
+    });
+    col.appendChild(stack);
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('drop');});
+    col.addEventListener('dragleave',()=>col.classList.remove('drop'));
+    col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('drop');
+      const id=e.dataTransfer.getData('id'); if(id) setStage(id,key);});
+    board.appendChild(col);
+  });
+}
+
+/* ---------------- actions ---------------- */
+async function setStage(id, stage){
+  // demo mode: state.jobs is the source of truth
+  if(!sb){
+    const j=state.jobs.find(x=>x.id===id); if(!j||j.stage===stage) return;
+    j.stage=stage; renderBoard(); return;
+  }
+  // live mode: RAW is the source of truth; rebuild everything so KPIs/WIP stay in sync
+  const rj=RAW.jobs.find(x=>x.id===id); if(!rj||rj.stage===stage) return;
+  const prev=rj.stage; rj.stage=stage; buildState(); renderAll();     // optimistic
+  const {error}=await sb.from('job_assignments').update({stage}).eq('id',id);
+  if(error){ console.error(error); rj.stage=prev; buildState(); renderAll(); }  // rollback
+}
+
+function renderAll(){
+  renderKpis();renderMachineGrid();renderPareto();renderWip();
+  renderMachineTbl();renderPeople();renderSkills();renderBoard();
+}
+function setConn(){
+  const c=$('#conn');
+  c.className='conn '+(state.online?'live':'demo');
+  $('#connTxt').textContent=state.online?'Live · Supabase':'Demo data';
+}
+
+/* ---------------- Supabase data layer ---------------- */
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[]};
+const ACTIVE=['setup','running','inspection'];
+const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
+
+function fmtDue(iso){
+  if(!iso) return {due:'—',late:false};
+  const d=new Date(iso), now=new Date();
+  const late=d<now;
+  const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate());
+  const diff=(day(d)-day(now))/86400000;
+  const hm=d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',hour12:false});
+  if(diff===0) return {due:'วันนี้ '+hm,late};
+  if(diff===1) return {due:'พรุ่งนี้ '+hm,late};
+  if(diff<0)  return {due:'เลยกำหนด',late:true};
+  return {due:d.toLocaleDateString('th-TH',{day:'numeric',month:'short'})+' '+hm,late};
+}
+
+// transform RAW (from Supabase) -> state (shapes the render functions expect)
+function buildState(){
+  const jobsRaw=RAW.jobs;
+  // machines
+  state.machines=RAW.machines.map(m=>{
+    const cur=jobsRaw.find(j=>j.machine_id===m.id && ACTIVE.includes(j.stage));
+    return {code:m.code,type:m.machine_types?.name||'',status:m.status,oee:m.oee,
+      oee_target:m.oee_target,
+      job:cur?.work_orders?.part_numbers?.part_no||null,
+      operator:cur?first(cur.employees?.full_name):'—'};
+  }).sort((a,b)=>a.code.localeCompare(b.code));
+  // jobs (dispatch board)
+  state.jobs=jobsRaw.map(j=>{
+    const f=fmtDue(j.work_orders?.due_at);
+    return {id:j.id,wo:j.work_orders?.wo_number||'—',
+      part:j.work_orders?.part_numbers?.part_no||'—',qty:j.planned_qty,
+      due:f.due,late:f.late,priority:j.work_orders?.priority||3,
+      machine:j.machines?.code||'—',operator:first(j.employees?.full_name),stage:j.stage};
+  }).sort((a,b)=>(a.priority-b.priority)||(a.wo>b.wo?1:-1));
+  // WIP per machine (not done)
+  state.wip=RAW.machines.map(m=>({machine:m.code,
+    count:jobsRaw.filter(j=>j.machine_id===m.id&&j.stage!=='done').length}))
+    .sort((a,b)=>a.machine.localeCompare(b.machine));
+  // Pareto from downtime
+  const agg={};
+  RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+(d.minutes||0);});
+  state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
+  // People
+  const roleLabel=['dept_manager'];
+  state.people=RAW.employees.filter(e=>e.role!=='dept_manager').map(e=>{
+    const held=jobsRaw.find(j=>j.operator_id===e.id&&ACTIVE.includes(j.stage));
+    return {full_name:e.full_name,role:e.role,shift:e.shifts?.name||'—',
+      holds:held?`${held.work_orders?.wo_number} @ ${held.machines?.code||'?'}`:'—'};
+  });
+  // Skill matrix
+  const cols=RAW.machineTypes.map(t=>t.name);
+  const byEmp={};
+  RAW.skills.forEach(s=>{
+    const nm=s.employees?.full_name; if(!nm) return;
+    (byEmp[nm]=byEmp[nm]||{})[s.machine_types?.name]=s.level;
+  });
+  const rows=Object.entries(byEmp).map(([employee,levels])=>({employee,levels}));
+  const spof={};
+  cols.forEach(c=>{spof[c]=rows.filter(r=>(r.levels[c]||0)>=2).length===1;});
+  state.skills={columns:cols,rows,spof};
+  // KPIs
+  const oeeAvg=state.machines.length?Math.round(state.machines.reduce((s,m)=>s+m.oee,0)/state.machines.length):0;
+  const oeeTgt=state.machines.length?Math.round(state.machines.reduce((s,m)=>s+m.oee_target,0)/state.machines.length):0;
+  const target=jobsRaw.reduce((s,j)=>s+(j.planned_qty||0),0);
+  const done=jobsRaw.filter(j=>j.stage==='done').reduce((s,j)=>s+j.planned_qty,0);
+  const wip=jobsRaw.filter(j=>['running','inspection'].includes(j.stage)).reduce((s,j)=>s+j.planned_qty,0);
+  const active=state.jobs.filter(j=>j.stage!=='done');
+  const onTime=active.length?Math.round(100*active.filter(j=>!j.late).length/active.length):100;
+  state.kpis={output:done+Math.round(wip*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4};
+}
+
+async function loadFromSupabase(){
+  const q=[
+    sb.from('machine_types').select('id,name'),
+    sb.from('machines').select('id,code,status,oee,oee_target,type_id,machine_types(name)'),
+    sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
+    sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
+    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_orders(wo_number,priority,due_at,part_numbers(part_no)),machines(code),employees(full_name)'),
+    sb.from('downtime_logs').select('minutes,downtime_reasons(name)'),
+  ];
+  const [mt,mac,emp,sk,jb,dt]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt].find(r=>r.error);
+  if(err) throw err.error;
+  RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,jobs:jb.data,downtime:dt.data};
+  buildState();
+}
+
+/* ---------------- boot ---------------- */
+async function boot(){
+  if(sb){
+    try{ await loadFromSupabase(); state.online=true; }
+    catch(e){ console.error('Supabase error — demo data:',e); Object.assign(state,structuredClone(FALLBACK)); state.online=false; }
+  }else{
+    Object.assign(state,structuredClone(FALLBACK)); state.online=false;
+  }
+  setConn();renderAll();
+}
+
+/* ---------------- router + clock ---------------- */
+const TITLES={overview:['Control Room','ภาพรวมการผลิตแบบเรียลไทม์ · แผนกเจียร'],
+  dispatch:['Dispatch Board','จ่ายงานและติดตามสถานะแบบ Kanban'],
+  machines:['Machines','ทะเบียนและสถานะเครื่องจักร'],
+  people:['People & Skills','บุคลากรและตารางความชำนาญ']};
+function go(v){
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='v-'+v);
+  $('#viewTitle').innerHTML=`${TITLES[v][0]}<small>${TITLES[v][1]}</small>`;
+}
+document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>go(a.dataset.v)));
+function tick(){
+  const d=new Date();
+  $('#clk').textContent=d.toLocaleTimeString('th-TH',{hour12:false});
+  $('#dte').textContent=d.toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'short',year:'numeric'});
+}
+setInterval(tick,1000);tick();
+boot();
+</script>
+</body>
+</html>
