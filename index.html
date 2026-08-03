@@ -203,6 +203,59 @@
     .topbar{padding:13px 16px}
     .topright{gap:10px}
   }
+  /* ---- add/edit buttons, toolbar ---- */
+  .addbtn{font-family:var(--mono);font-size:11px;letter-spacing:.05em;background:var(--cool-bg);color:var(--cool);
+    border:1px solid var(--cool);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;transition:.13s;font-weight:500}
+  .addbtn:hover{background:var(--cool);color:#04181C}
+  .toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
+  .panel > h2 .addbtn{margin-left:auto}
+  .clickable{cursor:pointer}
+  .clickable:hover td{background:var(--bg-3)!important}
+  .skill.edit{cursor:pointer;transition:.1s}
+  .skill.edit:hover{outline:2px solid var(--cool);outline-offset:1px}
+  .card .asg{flex:1.4;background:var(--bg-1);border:1px solid var(--line);color:var(--cool);
+    border-radius:var(--r-sm);padding:5px;font-family:var(--mono);font-size:10.5px;cursor:pointer;transition:.13s}
+  .card .asg:hover{background:var(--cool-bg);border-color:var(--cool)}
+
+  /* ---- modal ---- */
+  .overlay{position:fixed;inset:0;background:rgba(8,11,14,.72);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .overlay[hidden]{display:none}
+  .modal{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);width:100%;max-width:440px;
+    max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal h3{font-family:var(--disp);font-size:18px;font-weight:600;letter-spacing:.04em;
+    padding:16px 20px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center}
+  .modal h3 .x{cursor:pointer;color:var(--tx-faint);font-size:20px;line-height:1;background:none;border:none}
+  .modal h3 .x:hover{color:var(--tx)}
+  .modal .body{padding:18px 20px}
+  .modal .foot{padding:14px 20px;border-top:1px solid var(--line-soft);display:flex;gap:10px;justify-content:flex-end}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--tx-dim);margin-bottom:6px}
+  .field input,.field select{width:100%;background:var(--bg-2);border:1px solid var(--line);color:var(--tx);
+    border-radius:var(--r-sm);padding:9px 11px;font-family:var(--body);font-size:13px;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--cool)}
+  .field .hint2{font-family:var(--mono);font-size:10px;color:var(--tx-faint);margin-top:5px}
+  .field.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .btn{font-family:var(--mono);font-size:12px;letter-spacing:.04em;border-radius:var(--r-sm);padding:9px 16px;
+    cursor:pointer;border:1px solid var(--line);transition:.13s;font-weight:500}
+  .btn.ghost{background:transparent;color:var(--tx-dim)}
+  .btn.ghost:hover{color:var(--tx);border-color:var(--tx-dim)}
+  .btn.primary{background:var(--cool);color:#04181C;border-color:var(--cool)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.danger{background:transparent;color:var(--down);border-color:var(--down)}
+  .btn.danger:hover{background:var(--down-bg)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .opt-rec{color:var(--run)} .opt-warn{color:var(--tx-faint)}
+
+  /* ---- toast ---- */
+  .toasts{position:fixed;right:20px;bottom:20px;z-index:200;display:flex;flex-direction:column;gap:8px}
+  .toast{font-family:var(--mono);font-size:12px;padding:11px 15px;border-radius:var(--r-sm);
+    border:1px solid var(--line);background:var(--bg-2);color:var(--tx);box-shadow:0 8px 24px rgba(0,0,0,.4);
+    display:flex;align-items:center;gap:8px;animation:slidein .2s ease}
+  .toast.ok{border-color:var(--run);color:var(--run)}
+  .toast.err{border-color:var(--down);color:var(--down)}
+  @keyframes slidein{from{transform:translateX(20px);opacity:0}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -260,13 +313,14 @@
     </section>
 
     <section class="view" id="v-dispatch" hidden>
+      <div class="toolbar"><button class="addbtn" id="btnNewWO">+ จ่ายงานใหม่</button></div>
       <div class="board" id="board"></div>
       <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
     </section>
 
     <section class="view" id="v-machines" hidden>
       <div class="panel">
-        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span></h2>
+        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><button class="addbtn" id="btnAddMachine">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
           <thead><tr><th>เครื่อง</th><th>ประเภท</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
           <tbody></tbody>
@@ -276,7 +330,7 @@
 
     <section class="view" id="v-people" hidden>
       <div class="panel mb18">
-        <h2>บุคลากรในแผนก <span class="tag">กะ A</span></h2>
+        <h2>บุคลากรในแผนก <span class="tag">กะ A</span><button class="addbtn" id="btnAddEmp">+ เพิ่มช่าง</button></h2>
         <table class="tbl" id="peopleTbl">
           <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>กะ</th><th>งานที่ถืออยู่</th></tr></thead>
           <tbody></tbody>
@@ -296,6 +350,9 @@
     </section>
   </main>
 </div>
+
+<div class="overlay" id="overlay" hidden><div class="modal" id="modal"></div></div>
+<div class="toasts" id="toasts"></div>
 
 <script>
 /* ====== ตั้งค่า Supabase (เอาจาก Supabase → Project Settings → API) ======
@@ -431,7 +488,7 @@ function renderWip(){
 function renderMachineTbl(){
   const tb=$('#machineTbl tbody');tb.innerHTML='';
   state.machines.forEach(m=>{
-    const tr=el('tr');
+    const tr=el('tr','clickable');tr.dataset.code=m.code;tr.title='คลิกเพื่อแก้สถานะ/OEE';
     tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${m.code}</td>
       <td style="color:var(--tx-dim)">${m.type}</td>
       <td><span class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</span></td>
@@ -464,7 +521,7 @@ function renderSkills(){
     s.columns.forEach(col=>{
       const v=row.levels[col]||0;
       const flag=(v>=2&&s.spof[col])?'<span class="warnflag">เดี่ยว</span>':'';
-      cells+=`<td style="text-align:center"><span class="skill sk${v}">${v}</span>${flag}</td>`;
+      cells+=`<td style="text-align:center"><span class="skill edit sk${v}" data-emp="${row.employee_id}" data-col="${col}" title="คลิกเพื่อปรับระดับ 0→3">${v}</span>${flag}</td>`;
     });
     tr.innerHTML=cells;tb.appendChild(tr);
   });
@@ -484,6 +541,7 @@ function renderBoard(){
         <div class="row"><span>ครบกำหนด</span><span class="due ${j.late?'late':''}">${j.due}</span></div>
         <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.machine}</div></div>
         <div class="mv"><button ${i===0?'disabled':''} data-mv="-1">◀</button>
+          <button class="asg" data-asg="${j.id}">จ่าย</button>
           <button ${i===STAGES.length-1?'disabled':''} data-mv="1">▶</button></div>`;
       card.addEventListener('dragstart',e=>{e.dataTransfer.setData('id',j.id);card.classList.add('dragging');});
       card.addEventListener('dragend',()=>card.classList.remove('dragging'));
@@ -526,7 +584,7 @@ function setConn(){
 }
 
 /* ---------------- Supabase data layer ---------------- */
-let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[]};
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[]};
 const ACTIVE=['setup','running','inspection'];
 const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
 
@@ -577,16 +635,20 @@ function buildState(){
     return {full_name:e.full_name,role:e.role,shift:e.shifts?.name||'—',
       holds:held?`${held.work_orders?.wo_number} @ ${held.machines?.code||'?'}`:'—'};
   });
-  // Skill matrix
+  // Skill matrix — build from employees (operator/lead) so new people show up immediately
   const cols=RAW.machineTypes.map(t=>t.name);
-  const byEmp={};
+  const typeNameById={}; RAW.machineTypes.forEach(t=>typeNameById[t.id]=t.name);
+  const lvl={};  // employee_id -> {typeName: level}
   RAW.skills.forEach(s=>{
-    const nm=s.employees?.full_name; if(!nm) return;
-    (byEmp[nm]=byEmp[nm]||{})[s.machine_types?.name]=s.level;
+    const tn=s.machine_types?.name||typeNameById[s.machine_type_id];
+    (lvl[s.employee_id]=lvl[s.employee_id]||{})[tn]=s.level;
   });
-  const rows=Object.entries(byEmp).map(([employee,levels])=>({employee,levels}));
+  const rows=RAW.employees.filter(e=>['operator','lead_technician'].includes(e.role)).map(e=>{
+    const levels={}; cols.forEach(c=>levels[c]=(lvl[e.id]&&lvl[e.id][c])||0);
+    return {employee:e.full_name,employee_id:e.id,levels};
+  });
   const spof={};
-  cols.forEach(c=>{spof[c]=rows.filter(r=>(r.levels[c]||0)>=2).length===1;});
+  cols.forEach(c=>{spof[c]=rows.filter(r=>r.levels[c]>=2).length===1;});
   state.skills={columns:cols,rows,spof};
   // KPIs
   const oeeAvg=state.machines.length?Math.round(state.machines.reduce((s,m)=>s+m.oee,0)/state.machines.length):0;
@@ -605,13 +667,16 @@ async function loadFromSupabase(){
     sb.from('machines').select('id,code,status,oee,oee_target,type_id,machine_types(name)'),
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
-    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_orders(wo_number,priority,due_at,part_numbers(part_no)),machines(code),employees(full_name)'),
+    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,work_orders(id,wo_number,priority,due_at,part_numbers(part_no)),machines(code),employees(full_name)'),
     sb.from('downtime_logs').select('minutes,downtime_reasons(name)'),
+    sb.from('part_numbers').select('id,part_no,description,compatible_type_id').order('part_no'),
+    sb.from('shifts').select('id,name'),
   ];
-  const [mt,mac,emp,sk,jb,dt]=await Promise.all(q);
-  const err=[mt,mac,emp,sk,jb,dt].find(r=>r.error);
+  const [mt,mac,emp,sk,jb,dt,pt,sh]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt,pt,sh].find(r=>r.error);
   if(err) throw err.error;
-  RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,jobs:jb.data,downtime:dt.data};
+  RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,
+       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data};
   buildState();
 }
 
@@ -644,6 +709,187 @@ function tick(){
 }
 setInterval(tick,1000);tick();
 boot();
+</script>
+
+<script>
+/* ================= Data management layer (create / assign / edit) ================= */
+const STL={running:'เดินเครื่อง',idle:'ว่าง',down:'เสีย',maintenance:'ซ่อมบำรุง'};
+const typeIdByName={}, typeNameById2={};
+function refreshTypeMaps(){ RAW.machineTypes.forEach(t=>{typeIdByName[t.name]=t.id; typeNameById2[t.id]=t.name;}); }
+
+/* ---- toast ---- */
+function toast(msg,kind){ const t=el('div','toast '+(kind||'')); t.textContent=msg; $('#toasts').appendChild(t);
+  setTimeout(()=>{t.style.opacity='0'; setTimeout(()=>t.remove(),300);},2600); }
+
+/* ---- modal ---- */
+function openModal(title,body,foot){
+  $('#modal').innerHTML=`<h3>${title}<button class="x" id="mX">&times;</button></h3>`+
+    `<div class="body">${body}</div><div class="foot">${foot}</div>`;
+  $('#overlay').hidden=false; $('#mX').onclick=closeModal;
+}
+function closeModal(){ $('#overlay').hidden=true; $('#modal').innerHTML=''; }
+
+/* ---- Supabase write helpers ---- */
+function live(){ if(!sb){ toast('โหมด demo — ต่อ Supabase ก่อนจึงบันทึกได้','err'); return false;} return true; }
+async function sbInsert(table,row,ret){ let q=sb.from(table).insert(row); if(ret) q=q.select().single();
+  const {data,error}=await q; if(error) throw error; return data; }
+async function sbUpdate(table,id,patch){ const {error}=await sb.from(table).update(patch).eq('id',id); if(error) throw error; }
+async function sbDelete(table,id){ const {error}=await sb.from(table).delete().eq('id',id); if(error) throw error; }
+async function afterWrite(msg){ await loadFromSupabase(); renderAll(); toast(msg||'บันทึกแล้ว','ok'); }
+
+/* ---- option builders ---- */
+function partOptions(){ return RAW.parts.map(p=>`<option value="${p.id}" data-type="${p.compatible_type_id||''}">${p.part_no}${p.description?' · '+p.description:''}</option>`).join(''); }
+function machineOptions(sel){ let o='<option value="">— ไม่ระบุ —</option>';
+  RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).forEach(m=>{
+    o+=`<option value="${m.id}" data-type="${m.type_id}" ${m.id===sel?'selected':''}>${m.code} (${m.machine_types?.name||typeNameById2[m.type_id]||''})</option>`; });
+  return o; }
+function operatorOptions(typeId,sel){
+  const emps=RAW.employees.filter(e=>['operator','lead_technician'].includes(e.role));
+  const lvlOf=id=>{ const s=RAW.skills.find(x=>x.employee_id===id&&x.machine_type_id===typeId); return s?s.level:0; };
+  const arr=emps.map(e=>({id:e.id,name:e.full_name,lvl:typeId?lvlOf(e.id):null}));
+  if(typeId) arr.sort((a,b)=>b.lvl-a.lvl);
+  let o='<option value="">— ไม่ระบุ —</option>';
+  arr.forEach(e=>{ const tag=e.lvl==null?'':(e.lvl>=2?` · skill ${e.lvl} ✓`:e.lvl===1?' · skill 1':' · ไม่มีทักษะ');
+    o+=`<option value="${e.id}" ${e.id===sel?'selected':''}>${e.name}${tag}</option>`; });
+  return o; }
+function nextWO(){ let max=0; RAW.jobs.forEach(j=>{const n=parseInt(String(j.work_orders?.wo_number||'').replace(/\D/g,''),10); if(n>max)max=n;});
+  return 'WO-'+String(max+1).padStart(4,'0'); }
+function localDatetime(d){ return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+
+/* ---- New Work Order + dispatch ---- */
+function openNewWO(){
+  if(!live()) return; refreshTypeMaps();
+  const body=`
+   <div class="field"><label>Part</label><select id="fPart">${partOptions()}</select></div>
+   <div class="field row2">
+     <div><label>จำนวน (ชิ้น)</label><input id="fQty" type="number" min="1" value="100"></div>
+     <div><label>ความสำคัญ</label><select id="fPri"><option value="1">P1 สูงสุด</option><option value="2">P2</option><option value="3" selected>P3</option></select></div></div>
+   <div class="field"><label>ครบกำหนด</label><input id="fDue" type="datetime-local"></div>
+   <div class="field"><label>ลูกค้า</label><input id="fCust" type="text" placeholder="เช่น ACME"></div>
+   <div class="field"><label>เครื่อง (จ่ายเลย หรือเว้นว่าง)</label><select id="fMac">${machineOptions('')}</select></div>
+   <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="fOp">${operatorOptions(null,null)}</select>
+     <div class="hint2" id="opHint">เลือกเครื่องก่อน ระบบจะเรียงช่างที่ทักษะตรงประเภทเครื่องขึ้นก่อน</div></div>`;
+  openModal('จ่ายงานใหม่ · New Work Order',body,
+    `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="fSave">สร้าง + จ่ายงาน</button>`);
+  const d=new Date(Date.now()+8*3600e3); d.setSeconds(0,0); $('#fDue').value=localDatetime(d);
+  $('#fMac').onchange=()=>{ const opt=$('#fMac').selectedOptions[0]; const tid=opt?opt.dataset.type:'';
+    $('#fOp').innerHTML=operatorOptions(tid||null,$('#fOp').value||null);
+    $('#opHint').textContent=tid?'เรียงช่างที่ทักษะสูงสุดสำหรับเครื่องนี้ก่อน (✓ = แนะนำ)':'ยังไม่เลือกเครื่อง'; };
+  $('#fSave').onclick=submitNewWO;
+}
+async function submitNewWO(){
+  try{
+    const partId=$('#fPart').value, qty=parseInt($('#fQty').value,10)||0;
+    if(!partId||qty<=0) return toast('กรอก Part และจำนวนให้ครบ','err');
+    const dv=$('#fDue').value; const due_at=dv?new Date(dv).toISOString():null;
+    const wo=await sbInsert('work_orders',{wo_number:nextWO(),part_number_id:partId,quantity:qty,
+      due_at,priority:parseInt($('#fPri').value,10),customer:$('#fCust').value||'',status:'in_progress'},true);
+    const shiftA=(RAW.shifts.find(s=>s.name==='A')||RAW.shifts[0]||{}).id||null;
+    await sbInsert('job_assignments',{work_order_id:wo.id,machine_id:$('#fMac').value||null,
+      operator_id:$('#fOp').value||null,shift_id:shiftA,planned_qty:qty,stage:'queued'});
+    closeModal(); await afterWrite('สร้าง '+wo.wo_number+' แล้ว');
+  }catch(e){ console.error(e); toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
+/* ---- Assign / edit / delete a job ---- */
+function openAssign(id){
+  if(!live()) return; refreshTypeMaps();
+  const rj=RAW.jobs.find(j=>j.id===id); if(!rj) return;
+  const curType=rj.machine_id?(RAW.machines.find(m=>m.id===rj.machine_id)||{}).type_id:'';
+  const body=`
+   <div class="field"><label>เครื่อง</label><select id="aMac">${machineOptions(rj.machine_id)}</select></div>
+   <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="aOp">${operatorOptions(curType||null,rj.operator_id)}</select>
+     <div class="hint2">ช่างที่มี skill ≥2 สำหรับเครื่องนี้ = แนะนำ (✓)</div></div>
+   <div class="field"><label>สถานะงาน</label><select id="aStage">${STAGES.map(s=>`<option value="${s[0]}" ${s[0]===rj.stage?'selected':''}>${s[1]}</option>`).join('')}</select></div>`;
+  openModal('จ่ายงาน · '+(rj.work_orders?.wo_number||''),body,
+    `<button class="btn danger" id="aDel">ลบงาน</button><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="aSave">บันทึก</button>`);
+  $('#aMac').onchange=()=>{ const opt=$('#aMac').selectedOptions[0]; const tid=opt?opt.dataset.type:'';
+    $('#aOp').innerHTML=operatorOptions(tid||null,$('#aOp').value||null); };
+  $('#aSave').onclick=async()=>{ try{
+      await sbUpdate('job_assignments',id,{machine_id:$('#aMac').value||null,operator_id:$('#aOp').value||null,stage:$('#aStage').value});
+      closeModal(); await afterWrite('อัปเดตงานแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+  $('#aDel').onclick=async()=>{ if(!confirm('ลบงานนี้? (ลบทั้ง work order และการจ่ายงาน)')) return; try{
+      const woId=rj.work_order_id||rj.work_orders?.id||null;
+      await sbDelete('job_assignments',id); if(woId) await sbDelete('work_orders',woId);
+      closeModal(); await afterWrite('ลบงานแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+
+/* ---- Add machine / edit machine ---- */
+function openAddMachine(){
+  if(!live()) return;
+  const typeOpts=RAW.machineTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const stOpts=Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('');
+  const body=`
+   <div class="field"><label>รหัสเครื่อง</label><input id="mCode" placeholder="เช่น SG-03"></div>
+   <div class="field"><label>ประเภท</label><select id="mType">${typeOpts}</select></div>
+   <div class="field row2"><div><label>สถานะ</label><select id="mStatus">${stOpts}</select></div>
+     <div><label>OEE %</label><input id="mOee" type="number" min="0" max="100" value="0"></div></div>`;
+  openModal('เพิ่มเครื่องจักร',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="mSave">เพิ่ม</button>`);
+  $('#mSave').onclick=async()=>{ const code=$('#mCode').value.trim(); if(!code) return toast('กรอกรหัสเครื่อง','err');
+    try{ await sbInsert('machines',{code,type_id:$('#mType').value,status:$('#mStatus').value,oee:parseInt($('#mOee').value,10)||0});
+      closeModal(); await afterWrite('เพิ่มเครื่อง '+code);
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+function openEditMachine(code){
+  if(!live()) return; const m=RAW.machines.find(x=>x.code===code); if(!m) return;
+  const stOpts=Object.keys(STL).map(s=>`<option value="${s}" ${s===m.status?'selected':''}>${STL[s]}</option>`).join('');
+  const body=`
+   <div class="field row2"><div><label>สถานะ</label><select id="eStatus">${stOpts}</select></div>
+     <div><label>OEE %</label><input id="eOee" type="number" min="0" max="100" value="${m.oee}"></div></div>
+   <div class="field"><label>เป้า OEE %</label><input id="eTgt" type="number" min="0" max="100" value="${m.oee_target}"></div>`;
+  openModal('แก้ไขเครื่อง · '+m.code,body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="eSave">บันทึก</button>`);
+  $('#eSave').onclick=async()=>{ try{
+      await sbUpdate('machines',m.id,{status:$('#eStatus').value,oee:parseInt($('#eOee').value,10)||0,oee_target:parseInt($('#eTgt').value,10)||72});
+      closeModal(); await afterWrite('อัปเดตเครื่องแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+
+/* ---- Add employee ---- */
+function openAddEmp(){
+  if(!live()) return;
+  const roleOpts=[['operator','ช่างประจำจุด'],['lead_technician','หัวหน้าช่าง'],['shift_leader','หัวหน้ากะ']].map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('');
+  const shiftOpts=RAW.shifts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const body=`
+   <div class="field row2"><div><label>รหัสพนักงาน</label><input id="pCode" placeholder="เช่น E007"></div>
+     <div><label>กะ</label><select id="pShift">${shiftOpts}</select></div></div>
+   <div class="field"><label>ชื่อ-สกุล</label><input id="pName" placeholder="เช่น สมหมาย ใจดี"></div>
+   <div class="field"><label>บทบาท</label><select id="pRole">${roleOpts}</select></div>`;
+  openModal('เพิ่มช่าง / บุคลากร',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="pSave">เพิ่ม</button>`);
+  $('#pSave').onclick=async()=>{ const code=$('#pCode').value.trim(), name=$('#pName').value.trim();
+    if(!code||!name) return toast('กรอกรหัสและชื่อให้ครบ','err');
+    try{ const emp=await sbInsert('employees',{code,full_name:name,role:$('#pRole').value,shift_id:$('#pShift').value||null,status:'active'},true);
+      if(['operator','lead_technician'].includes(emp.role))
+        await sb.from('skill_matrix').insert(RAW.machineTypes.map(t=>({employee_id:emp.id,machine_type_id:t.id,level:0})));
+      closeModal(); await afterWrite('เพิ่ม '+name);
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+
+/* ---- Cycle a skill level 0->3 by clicking a matrix cell ---- */
+async function cycleSkill(empId,colName,cur){
+  if(!live()) return; refreshTypeMaps();
+  const typeId=typeIdByName[colName]; if(!typeId||!empId) return;
+  const next=(cur+1)%4;
+  try{
+    const {error}=await sb.from('skill_matrix').upsert({employee_id:empId,machine_type_id:typeId,level:next},{onConflict:'employee_id,machine_type_id'});
+    if(error) throw error;
+    await loadFromSupabase(); renderSkills();
+  }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
+/* ---- wiring ---- */
+function wireFeatures(){
+  $('#btnNewWO')?.addEventListener('click',openNewWO);
+  $('#btnAddMachine')?.addEventListener('click',openAddMachine);
+  $('#btnAddEmp')?.addEventListener('click',openAddEmp);
+  $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#overlay').hidden) closeModal(); });
+  $('#board').addEventListener('click',e=>{ const b=e.target.closest('.asg'); if(b){ e.stopPropagation(); openAssign(b.dataset.asg);} });
+  $('#machineTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.code) openEditMachine(tr.dataset.code); });
+  $('#skillTbl').addEventListener('click',e=>{ const c=e.target.closest('.skill.edit'); if(c) cycleSkill(c.dataset.emp,c.dataset.col,parseInt(c.textContent,10)||0); });
+}
+wireFeatures();
 </script>
 </body>
 </html>
