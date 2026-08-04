@@ -269,6 +269,20 @@
   .pill{font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:2px 8px;border-radius:5px;
     background:var(--bg-3);color:var(--tx-dim)}
   .pill.cls{background:var(--cool-bg);color:var(--cool)}
+  /* routing editor rows */
+  .oprow{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .oprow .seq{font-family:var(--mono);font-size:11px;color:var(--tx-dim);width:16px;text-align:center;flex:none}
+  .oprow input,.oprow select{background:var(--bg-2);border:1px solid var(--line);color:var(--tx);
+    border-radius:var(--r-sm);padding:6px 8px;font-family:var(--body);font-size:12px;outline:none}
+  .oprow input:focus,.oprow select:focus{border-color:var(--cool)}
+  .oprow .oName{flex:1;min-width:40px}
+  .oprow .oType{flex:none;width:104px}
+  .oprow .oCyc{width:56px;flex:none}
+  .opb{background:var(--bg-1);border:1px solid var(--line);color:var(--tx-dim);border-radius:var(--r-sm);
+    padding:5px 7px;cursor:pointer;font-size:11px;flex:none;line-height:1}
+  .opb:hover:not(:disabled){color:var(--tx);border-color:var(--tx-dim)}
+  .opb:disabled{opacity:.35;cursor:not-allowed}
+  .opb.del:hover{color:var(--down);border-color:var(--down)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -288,6 +302,7 @@
       <div class="lbl">Resources</div>
       <a data-v="machines"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Machines</a>
       <a data-v="people"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17.5 14c2.5 0 4.5 2 4.5 5"/></svg>People & Skills</a>
+      <a data-v="parts"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>Parts &amp; Routing</a>
     </nav>
     <div class="shiftbox">
       <div class="k">Active Shift</div>
@@ -359,6 +374,17 @@
           <span><b class="skill sk3">3</b> สอนได้</span>
           <span><b class="warnflag">เดี่ยว</b> มีคนทำได้คนเดียว (เสี่ยง)</span>
         </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-parts" hidden>
+      <div class="panel">
+        <h2>ทะเบียนชิ้นส่วนตลับลูกปืน <span class="tag">Part master + routing</span><button class="addbtn" id="btnAddPart">+ เพิ่ม Part</button></h2>
+        <table class="tbl" id="partsTbl">
+          <thead><tr><th>Part</th><th>ชนิด / ชิ้นส่วน</th><th>ขนาด d×D×B</th><th>Class</th><th>เป้า Ra / กลม (µm)</th><th>ขั้นตอน (routing)</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้สเปก · ปุ่ม <b>ขั้นตอน</b> เพื่อจัดลำดับงานเจียร (routing)</div>
       </div>
     </section>
   </main>
@@ -615,6 +641,7 @@ async function setStage(id, stage){
 function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
   renderMachineTbl();renderPeople();renderSkills();renderBoard();
+  if(typeof renderParts==='function') renderParts();
 }
 function setConn(){
   const c=$('#conn');
@@ -747,7 +774,8 @@ async function boot(){
 const TITLES={overview:['Control Room','ภาพรวมการผลิตแบบเรียลไทม์ · แผนกเจียร'],
   dispatch:['Dispatch Board','จ่ายงานและติดตามสถานะแบบ Kanban'],
   machines:['Machines','ทะเบียนและสถานะเครื่องจักร'],
-  people:['People & Skills','บุคลากรและตารางความชำนาญ']};
+  people:['People & Skills','บุคลากรและตารางความชำนาญ'],
+  parts:['Parts & Routing','ทะเบียนตลับลูกปืนและลำดับขั้นตอนเจียร']};
 function go(v){
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='v-'+v);
@@ -779,7 +807,7 @@ function openModal(title,body,foot){
     `<div class="body">${body}</div><div class="foot">${foot}</div>`;
   $('#overlay').hidden=false; $('#mX').onclick=closeModal;
 }
-function closeModal(){ $('#overlay').hidden=true; $('#modal').innerHTML=''; }
+function closeModal(){ $('#overlay').hidden=true; $('#modal').innerHTML=''; $('#modal').style.maxWidth=''; }
 
 /* ---- Supabase write helpers ---- */
 function live(){ if(!sb){ toast('โหมด demo — ต่อ Supabase ก่อนจึงบันทึกได้','err'); return false;} return true; }
@@ -932,6 +960,128 @@ async function cycleSkill(empId,colName,cur){
   }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 
+/* ================= Parts master + routing (ตลับลูกปืน) ================= */
+const COMP={inner_ring:'วงใน (inner)',outer_ring:'วงนอก (outer)',ball:'ลูกบอล',roller:'ลูกกลิ้ง'};
+const BTYPE={deep_groove_ball:'Deep groove ball',tapered_roller:'Tapered roller',cylindrical_roller:'Cylindrical roller',angular_contact:'Angular contact',ball:'Ball',roller:'Roller'};
+function numOrNull(sel){ const v=$(sel).value.trim(); return v===''?null:parseFloat(v); }
+
+function renderParts(){
+  const tb=$('#partsTbl tbody'); if(!tb) return; tb.innerHTML='';
+  (state.parts||[]).forEach(p=>{
+    const dims=(p.bore_d!=null||p.outer_d!=null||p.width_b!=null)
+      ? `${p.bore_d??'—'}×${p.outer_d??'—'}×${p.width_b??'—'}` : '—';
+    const bt=BTYPE[p.bearing_type]||p.bearing_type||'—';
+    const comp=COMP[p.component]||p.component||'';
+    const ra=p.target_ra!=null?p.target_ra:'—', rnd=p.target_roundness!=null?p.target_roundness:'—';
+    const ops=RAW.operations.filter(o=>o.part_number_id===p.id).sort((a,b)=>a.seq-b.seq);
+    const route=ops.length?ops.map(o=>o.op_name).join(' → '):'<span style="color:var(--down)">ยังไม่มี routing</span>';
+    const tr=el('tr','clickable'); tr.dataset.part=p.id; tr.title='คลิกเพื่อแก้สเปก';
+    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${p.part_no}</td>
+      <td>${bt}${comp?'<br><span style="color:var(--tx-dim);font-size:11px">'+comp+'</span>':''}</td>
+      <td style="font-family:var(--mono)">${dims}</td>
+      <td>${p.precision_class||'—'}</td>
+      <td style="font-family:var(--mono)">${ra} / ${rnd}</td>
+      <td style="font-size:11px;color:var(--tx-dim)">${route} <span class="tag">${ops.length} ขั้น</span></td>
+      <td><button class="addbtn" data-route="${p.id}">ขั้นตอน</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function openEditPart(pid){
+  if(!live()) return;
+  const p=pid?(state.parts.find(x=>x.id===pid)||{}):{};
+  const btOpts=Object.entries(BTYPE).map(([k,v])=>`<option value="${k}" ${p.bearing_type===k?'selected':''}>${v}</option>`).join('');
+  const compOpts=Object.entries(COMP).map(([k,v])=>`<option value="${k}" ${p.component===k?'selected':''}>${v}</option>`).join('');
+  const clsOpts=['P0','P6','P5','P4','P2'].map(c=>`<option ${p.precision_class===c?'selected':''}>${c}</option>`).join('');
+  const nv=v=>v==null?'':v;
+  const body=`
+   <div class="field row2"><div><label>Part No.</label><input id="pnNo" value="${p.part_no||''}" ${pid?'disabled':''} placeholder="เช่น 6205-IR"></div>
+     <div><label>ชั้นความเที่ยง</label><select id="pnCls">${clsOpts}</select></div></div>
+   <div class="field"><label>คำอธิบาย</label><input id="pnDesc" value="${(p.description||'').replace(/"/g,'&quot;')}" placeholder="เช่น 6205 inner ring"></div>
+   <div class="field row2"><div><label>ชนิดตลับลูกปืน</label><select id="pnBt">${btOpts}</select></div>
+     <div><label>ชิ้นส่วน</label><select id="pnComp">${compOpts}</select></div></div>
+   <div class="field"><label>ขนาด (mm)</label>
+     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+       <input id="pnD" type="number" step="0.001" value="${nv(p.bore_d)}" placeholder="d (bore)">
+       <input id="pnOD" type="number" step="0.001" value="${nv(p.outer_d)}" placeholder="D (OD)">
+       <input id="pnB" type="number" step="0.001" value="${nv(p.width_b)}" placeholder="B (width)"></div></div>
+   <div class="field row2"><div><label>เป้า Ra ราง (µm)</label><input id="pnRa" type="number" step="0.01" value="${nv(p.target_ra)}"></div>
+     <div><label>เป้าความกลม (µm)</label><input id="pnRnd" type="number" step="0.001" value="${nv(p.target_roundness)}"></div></div>
+   ${pid?'<div class="hint2">แก้ลำดับขั้นตอนเจียรได้ที่ปุ่ม “ขั้นตอน” ในตาราง</div>':'<div class="hint2">บันทึกแล้วจึงกดปุ่ม “ขั้นตอน” เพื่อกำหนด routing</div>'}`;
+  const foot=(pid?`<button class="btn danger" id="pnDel">ลบ Part</button>`:'')+
+    `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="pnSave">${pid?'บันทึก':'เพิ่ม'}</button>`;
+  openModal(pid?('แก้ไข Part · '+p.part_no):'เพิ่ม Part ตลับลูกปืน',body,foot);
+  $('#pnSave').onclick=()=>savePart(pid);
+  if(pid)$('#pnDel').onclick=()=>delPart(pid,p.part_no);
+}
+async function savePart(pid){
+  const ra=numOrNull('#pnRa');
+  const row={ description:$('#pnDesc').value.trim(),
+    bearing_type:$('#pnBt').value, component:$('#pnComp').value,
+    bore_d:numOrNull('#pnD'), outer_d:numOrNull('#pnOD'), width_b:numOrNull('#pnB'),
+    precision_class:$('#pnCls').value, target_ra:(ra==null?0:ra), target_roundness:numOrNull('#pnRnd') };
+  try{
+    if(pid){ await sbUpdate('part_numbers',pid,row); closeModal(); await afterWrite('อัปเดต Part แล้ว'); }
+    else{ const no=$('#pnNo').value.trim(); if(!no) return toast('กรอก Part No.','err');
+      row.part_no=no; await sbInsert('part_numbers',row); closeModal(); await afterWrite('เพิ่ม Part '+no); }
+  }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+async function delPart(pid,no){
+  if(!confirm('ลบ Part '+no+'? (routing จะถูกลบด้วย · ลบไม่ได้ถ้ามีงานอ้างถึง)')) return;
+  try{ await sbDelete('part_numbers',pid); closeModal(); await afterWrite('ลบ Part แล้ว'); }
+  catch(e){ toast('ลบไม่ได้ อาจมีงานอ้างถึงอยู่','err'); }
+}
+
+function openRouting(pid){
+  if(!live()) return;
+  const p=state.parts.find(x=>x.id===pid)||{};
+  let rows=RAW.operations.filter(o=>o.part_number_id===pid).sort((a,b)=>a.seq-b.seq)
+    .map(o=>({op_name:o.op_name,machine_type_id:o.machine_type_id,std_cycle_sec:o.std_cycle_sec||0}));
+  const tOpts=sel=>RAW.machineTypes.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${t.name}</option>`).join('');
+  function draw(){
+    $('#routeList').innerHTML = rows.length ? rows.map((r,i)=>`
+      <div class="oprow" data-i="${i}"><span class="seq">${i+1}</span>
+        <input class="oName" value="${(r.op_name||'').replace(/"/g,'&quot;')}" placeholder="ชื่อขั้นตอน">
+        <select class="oType">${tOpts(r.machine_type_id)}</select>
+        <input class="oCyc" type="number" value="${r.std_cycle_sec||0}" title="วินาที/ชิ้น">
+        <button class="opb up" ${i===0?'disabled':''}>▲</button>
+        <button class="opb dn" ${i===rows.length-1?'disabled':''}>▼</button>
+        <button class="opb del">✕</button></div>`).join('')
+      : '<div class="hint2" style="padding:6px 0">ยังไม่มีขั้นตอน กด “+ เพิ่มขั้นตอน”</div>';
+    $('#routeList').querySelectorAll('.oprow').forEach(rw=>{
+      const i=+rw.dataset.i;
+      rw.querySelector('.oName').oninput=e=>rows[i].op_name=e.target.value;
+      rw.querySelector('.oType').onchange=e=>rows[i].machine_type_id=e.target.value;
+      rw.querySelector('.oCyc').oninput=e=>rows[i].std_cycle_sec=parseInt(e.target.value,10)||0;
+      rw.querySelector('.up').onclick=()=>{ if(i>0){[rows[i-1],rows[i]]=[rows[i],rows[i-1]];draw();} };
+      rw.querySelector('.dn').onclick=()=>{ if(i<rows.length-1){[rows[i+1],rows[i]]=[rows[i],rows[i+1]];draw();} };
+      rw.querySelector('.del').onclick=()=>{ rows.splice(i,1); draw(); };
+    });
+  }
+  const body=`<div class="hint2" style="margin-bottom:10px">ลำดับงานเจียรของ <b>${p.part_no||''}</b> — ใช้ ▲▼ จัดลำดับ · ช่องขวาสุด = วินาที/ชิ้น</div>
+    <div id="routeList"></div>
+    <button class="btn ghost" id="addOp" style="margin-top:10px">+ เพิ่มขั้นตอน</button>`;
+  openModal('ขั้นตอนการเจียร · '+(p.part_no||''),body,
+    `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="routeSave">บันทึกลำดับงาน</button>`);
+  $('#modal').style.maxWidth='560px';
+  draw();
+  $('#addOp').onclick=()=>{ rows.push({op_name:'',machine_type_id:RAW.machineTypes[0]?.id||null,std_cycle_sec:0}); draw(); };
+  $('#routeSave').onclick=()=>saveRouting(pid,rows);
+}
+async function saveRouting(pid,rows){
+  const clean=rows.filter(r=>(r.op_name||'').trim());
+  if(clean.some(r=>!r.machine_type_id)) return toast('เลือกประเภทเครื่องให้ครบทุกขั้น','err');
+  try{
+    const d=await sb.from('part_operations').delete().eq('part_number_id',pid); if(d.error) throw d.error;
+    if(clean.length){
+      const payload=clean.map((r,i)=>({part_number_id:pid,seq:i+1,op_name:r.op_name.trim(),
+        machine_type_id:r.machine_type_id,std_cycle_sec:r.std_cycle_sec||0}));
+      const ins=await sb.from('part_operations').insert(payload); if(ins.error) throw ins.error;
+    }
+    closeModal(); await afterWrite('บันทึกลำดับงานแล้ว');
+  }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
 /* ---- wiring ---- */
 function wireFeatures(){
   $('#btnNewWO')?.addEventListener('click',openNewWO);
@@ -942,6 +1092,11 @@ function wireFeatures(){
   $('#board').addEventListener('click',e=>{ const b=e.target.closest('.asg'); if(b){ e.stopPropagation(); openAssign(b.dataset.asg);} });
   $('#machineTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.code) openEditMachine(tr.dataset.code); });
   $('#skillTbl').addEventListener('click',e=>{ const c=e.target.closest('.skill.edit'); if(c) cycleSkill(c.dataset.emp,c.dataset.col,parseInt(c.textContent,10)||0); });
+  $('#btnAddPart')?.addEventListener('click',()=>openEditPart(null));
+  $('#partsTbl')?.addEventListener('click',e=>{
+    const rb=e.target.closest('[data-route]'); if(rb){ e.stopPropagation(); openRouting(rb.dataset.route); return; }
+    const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.part) openEditPart(tr.dataset.part);
+  });
 }
 wireFeatures();
 </script>
