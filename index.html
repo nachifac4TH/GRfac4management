@@ -80,6 +80,7 @@
   .up{color:var(--run)} .warn{color:var(--idle)} .bad{color:var(--down)}
 
   .grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start}
+  .grid2>*{min-width:0}
   .panel{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
   .panel > h2{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     padding:14px 16px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between}
@@ -106,7 +107,7 @@
   .st.maintenance{background:var(--cool-bg);color:var(--cool)} .st.maintenance .dot{background:var(--cool)}
   @keyframes blink{50%{opacity:.25}}
 
-  .pareto{padding:16px}
+  .pareto{padding:16px;min-width:0;overflow:hidden}
   .prow{display:grid;grid-template-columns:110px 1fr 52px;align-items:center;gap:10px;margin-bottom:11px}
   .prow .nm{font-size:12px;color:var(--tx-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .prow .track{height:15px;background:var(--bg-3);border-radius:4px;overflow:hidden}
@@ -340,7 +341,7 @@
             <div class="pareto" id="paretoBox"></div>
           </div>
           <div class="panel">
-            <h2>คิวงานหน้าเครื่อง (WIP) <span class="tag">จำนวนงานรอ</span></h2>
+            <h2>คิวงานตามขั้นตอน (WIP) <span class="tag">คอขวดต่อขั้นตอน</span></h2>
             <div class="wip"><div class="wipbar" id="wipBar"></div></div>
           </div>
         </div>
@@ -357,7 +358,7 @@
       <div class="panel">
         <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><button class="addbtn" id="btnAddMachine">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
-          <thead><tr><th>เครื่อง</th><th>สาย (Line)</th><th>ประเภท</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
+          <thead><tr><th>Model</th><th>สาย (Line)</th><th>เครื่องจักร</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -523,11 +524,12 @@ function renderPareto(){
 }
 function renderWip(){
   const bar=$('#wipBar');bar.innerHTML='';
-  const max=Math.max(1,...state.wip.map(w=>w.count));
-  state.wip.forEach(w=>{
+  const data=state.opWip||[];
+  const max=Math.max(1,...data.map(w=>w.count));
+  data.forEach(w=>{
     const hot=w.count===max&&max>0;
     const col=el('div','col'+(hot?' hot':''));
-    col.innerHTML=`<div class="b" style="height:${18+w.count/max*46}px"><span>${w.count}</span></div><div class="lb">${w.machine}</div>`;
+    col.innerHTML=`<div class="b" style="height:${18+w.count/max*46}px"><span>${w.count}</span></div><div class="lb">${w.name}</div>`;
     bar.appendChild(col);
   });
 }
@@ -535,7 +537,7 @@ function renderMachineTbl(){
   const tb=$('#machineTbl tbody');tb.innerHTML='';
   state.machines.forEach(m=>{
     const tr=el('tr','clickable');tr.dataset.code=m.code;tr.title='คลิกเพื่อแก้สถานะ/OEE';
-    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${m.code}</td>
+    tr.innerHTML=`<td><div style="font-family:var(--mono);font-weight:600">${m.model||'—'}</div><div style="font-family:var(--mono);font-size:10px;color:var(--tx-faint)">${m.code}</div></td>
       <td style="font-family:var(--mono);color:var(--cool)">${m.line||'—'}</td>
       <td style="color:var(--tx-dim)">${m.type}</td>
       <td><span class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</span></td>
@@ -681,7 +683,7 @@ function buildState(){
   // machines
   state.machines=RAW.machines.map(m=>{
     const cur=jobsRaw.find(j=>j.machine_id===m.id && ACTIVE.includes(j.stage));
-    return {code:m.code,line:m.line||'',type:m.machine_types?.name||'',status:m.status,oee:m.oee,
+    return {code:m.code,line:m.line||'',model:m.model||'',type:m.machine_types?.name||'',status:m.status,oee:m.oee,
       oee_target:m.oee_target,
       job:cur?.work_orders?.part_numbers?.part_no||null,
       operator:cur?first(cur.employees?.full_name):'—'};
@@ -750,7 +752,7 @@ function buildState(){
 async function loadFromSupabase(){
   const q=[
     sb.from('machine_types').select('id,name'),
-    sb.from('machines').select('id,code,status,oee,oee_target,type_id,line,machine_types(name)'),
+    sb.from('machines').select('id,code,status,oee,oee_target,type_id,line,model,machine_types(name)'),
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
     sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,part_numbers(part_no)),machines(code),employees(full_name)'),
@@ -942,34 +944,45 @@ function openAddMachine(){
   const typeOpts=RAW.machineTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   const stOpts=Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('');
   const lines=[...new Set(RAW.machines.map(m=>m.line).filter(Boolean))].sort();
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const body=`
-   <div class="field row2"><div><label>รหัสเครื่อง</label><input id="mCode" placeholder="เช่น IG401-RW"></div>
+   <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="mModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="mModelList" hidden></div></div></div>
      <div><label>สาย (Line)</label><div class="combo"><input id="mLine" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG40"><div class="combo-list" id="mLineList" hidden></div></div></div></div>
-   <div class="field"><label>ประเภทงาน</label><select id="mType">${typeOpts}</select></div>
+   <div class="field"><label>เครื่องจักร</label><select id="mType">${typeOpts}</select></div>
    <div class="field row2"><div><label>สถานะ</label><select id="mStatus">${stOpts}</select></div>
-     <div><label>OEE %</label><input id="mOee" type="number" min="0" max="100" value="0"></div></div>`;
+     <div><label>OEE %</label><input id="mOee" type="number" min="0" max="100" value="0"></div></div>
+   <div class="hint2">รหัสเครื่องจะสร้างอัตโนมัติจาก Line + เครื่องจักร (เช่น IG401-RW)</div>`;
   openModal('เพิ่มเครื่องจักร',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="mSave">เพิ่ม</button>`);
   setupCombo($('#mLine'),$('#mLineList'),lines);
-  $('#mSave').onclick=async()=>{ const code=$('#mCode').value.trim(); if(!code) return toast('กรอกรหัสเครื่อง','err');
-    try{ await sbInsert('machines',{code,line:$('#mLine').value.trim()||null,type_id:$('#mType').value,status:$('#mStatus').value,oee:parseInt($('#mOee').value,10)||0});
+  setupCombo($('#mModel'),$('#mModelList'),models);
+  $('#mSave').onclick=async()=>{
+    const line=$('#mLine').value.trim(), typeId=$('#mType').value;
+    const opName=RAW.machineTypes.find(t=>t.id===typeId)?.name||'';
+    const OC={'Raceway':'RW','Bore':'BR','Auto check':'AC','Honing':'HN'};
+    const oc=OC[opName]||opName.replace(/\s/g,'').slice(0,2).toUpperCase();
+    const code=(line||'MC')+'-'+oc;
+    try{ await sbInsert('machines',{code,line:line||null,model:$('#mModel').value.trim()||null,type_id:typeId,status:$('#mStatus').value,oee:parseInt($('#mOee').value,10)||0});
       closeModal(); await afterWrite('เพิ่มเครื่อง '+code);
-    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+    }catch(e){ toast(String(e.message||e).includes('duplicate')?'สถานีนี้มีอยู่แล้ว ('+code+')':'ผิดพลาด: '+(e.message||e),'err'); } };
 }
 function openEditMachine(code){
   if(!live()) return; const m=RAW.machines.find(x=>x.code===code); if(!m) return;
   const stOpts=Object.keys(STL).map(s=>`<option value="${s}" ${s===m.status?'selected':''}>${STL[s]}</option>`).join('');
   const typeOpts=RAW.machineTypes.map(t=>`<option value="${t.id}" ${t.id===m.type_id?'selected':''}>${t.name}</option>`).join('');
   const lines=[...new Set(RAW.machines.map(x=>x.line).filter(Boolean))].sort();
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const body=`
-   <div class="field row2"><div><label>สาย (Line)</label><div class="combo"><input id="eLine" autocomplete="off" value="${m.line||''}"><div class="combo-list" id="eLineList" hidden></div></div></div>
-     <div><label>ประเภทงาน</label><select id="eType">${typeOpts}</select></div></div>
-   <div class="field row2"><div><label>สถานะ</label><select id="eStatus">${stOpts}</select></div>
-     <div><label>OEE %</label><input id="eOee" type="number" min="0" max="100" value="${m.oee}"></div></div>
-   <div class="field"><label>เป้า OEE %</label><input id="eTgt" type="number" min="0" max="100" value="${m.oee_target}"></div>`;
+   <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="eModel" autocomplete="off" value="${m.model||''}"><div class="combo-list" id="eModelList" hidden></div></div></div>
+     <div><label>สาย (Line)</label><div class="combo"><input id="eLine" autocomplete="off" value="${m.line||''}"><div class="combo-list" id="eLineList" hidden></div></div></div></div>
+   <div class="field row2"><div><label>เครื่องจักร</label><select id="eType">${typeOpts}</select></div>
+     <div><label>สถานะ</label><select id="eStatus">${stOpts}</select></div></div>
+   <div class="field row2"><div><label>OEE %</label><input id="eOee" type="number" min="0" max="100" value="${m.oee}"></div>
+     <div><label>เป้า OEE %</label><input id="eTgt" type="number" min="0" max="100" value="${m.oee_target}"></div></div>`;
   openModal('แก้ไขเครื่อง · '+m.code,body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="eSave">บันทึก</button>`);
   setupCombo($('#eLine'),$('#eLineList'),lines);
+  setupCombo($('#eModel'),$('#eModelList'),models);
   $('#eSave').onclick=async()=>{ try{
-      await sbUpdate('machines',m.id,{line:$('#eLine').value.trim()||null,type_id:$('#eType').value,status:$('#eStatus').value,oee:parseInt($('#eOee').value,10)||0,oee_target:parseInt($('#eTgt').value,10)||72});
+      await sbUpdate('machines',m.id,{model:$('#eModel').value.trim()||null,line:$('#eLine').value.trim()||null,type_id:$('#eType').value,status:$('#eStatus').value,oee:parseInt($('#eOee').value,10)||0,oee_target:parseInt($('#eTgt').value,10)||72});
       closeModal(); await afterWrite('อัปเดตเครื่องแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
 }
