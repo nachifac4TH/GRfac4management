@@ -256,6 +256,19 @@
   .toast.ok{border-color:var(--run);color:var(--run)}
   .toast.err{border-color:var(--down);color:var(--down)}
   @keyframes slidein{from{transform:translateX(20px);opacity:0}}
+  .card .op{font-family:var(--mono);font-size:10.5px;color:var(--cool);background:var(--cool-bg);
+    display:inline-block;padding:2px 8px;border-radius:5px;margin-top:6px;letter-spacing:.02em}
+  .opwip{padding:16px}
+  .oprow{display:grid;grid-template-columns:150px 1fr 34px;align-items:center;gap:10px;margin-bottom:10px}
+  .oprow .nm{font-size:12px;color:var(--tx-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .oprow .track{height:16px;background:var(--bg-3);border-radius:4px;overflow:hidden}
+  .oprow .track i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#38bdce,#2f8f9c)}
+  .oprow.hot .track i{background:linear-gradient(90deg,var(--down),#8a2b26)}
+  .oprow .val{font-family:var(--mono);font-size:12px;text-align:right;color:var(--tx)}
+  .spec{font-family:var(--mono);font-size:12px;color:var(--tx-dim)}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:2px 8px;border-radius:5px;
+    background:var(--bg-3);color:var(--tx-dim)}
+  .pill.cls{background:var(--cool-bg);color:var(--cool)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -538,6 +551,7 @@ function renderBoard(){
       const card=el('div',`card p${j.priority}`);card.draggable=true;card.dataset.id=j.id;
       card.innerHTML=`<div class="top"><span class="wo">${j.wo}</span><span class="pri">P${j.priority}</span></div>
         <div class="part">Part <b>${j.part}</b> · ${j.qty} ชิ้น</div>
+        ${j.opTotal?`<div class="op">ขั้น ${j.opSeq}/${j.opTotal} · ${j.opName}</div>`:''}
         <div class="row"><span>ครบกำหนด</span><span class="due ${j.late?'late':''}">${j.due}</span></div>
         <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.machine}</div></div>
         <div class="mv"><button ${i===0?'disabled':''} data-mv="-1">◀</button>
@@ -566,9 +580,34 @@ async function setStage(id, stage){
     const j=state.jobs.find(x=>x.id===id); if(!j||j.stage===stage) return;
     j.stage=stage; renderBoard(); return;
   }
-  // live mode: RAW is the source of truth; rebuild everything so KPIs/WIP stay in sync
   const rj=RAW.jobs.find(x=>x.id===id); if(!rj||rj.stage===stage) return;
-  const prev=rj.stage; rj.stage=stage; buildState(); renderAll();     // optimistic
+
+  // reaching "done": advance to next routing operation, or complete the whole work order
+  if(stage==='done'){
+    const pid=rj.work_orders?.part_number_id;
+    const ops=RAW.operations.filter(o=>o.part_number_id===pid).sort((a,b)=>a.seq-b.seq);
+    const total=ops.length, cur=rj.op_seq||1;
+    if(total>0 && cur<total){
+      const nxt=ops.find(o=>o.seq===cur+1)||ops[cur];
+      const patch={op_seq:cur+1, op_name:nxt.op_name, op_machine_type_id:nxt.machine_type_id,
+                   stage:'queued', machine_id:null, operator_id:null};
+      Object.assign(rj,patch); rj.machines=null; rj.employees=null; buildState(); renderAll();  // optimistic
+      const {error}=await sb.from('job_assignments').update(patch).eq('id',id);
+      if(error){ console.error(error); await loadFromSupabase(); renderAll(); toast('ผิดพลาด: '+(error.message||error),'err'); }
+      else toast('→ ขั้นถัดไป: '+nxt.op_name,'ok');
+      return;
+    }
+    // final operation done → complete
+    rj.stage='done'; buildState(); renderAll();
+    const {error}=await sb.from('job_assignments').update({stage:'done'}).eq('id',id);
+    if(error){ await loadFromSupabase(); renderAll(); return; }
+    if(rj.work_order_id) await sb.from('work_orders').update({status:'completed'}).eq('id',rj.work_order_id);
+    toast('เสร็จครบทุกขั้นตอน ✓','ok');
+    return;
+  }
+
+  // normal stage change within the current operation
+  const prev=rj.stage; rj.stage=stage; buildState(); renderAll();      // optimistic
   const {error}=await sb.from('job_assignments').update({stage}).eq('id',id);
   if(error){ console.error(error); rj.stage=prev; buildState(); renderAll(); }  // rollback
 }
@@ -584,7 +623,7 @@ function setConn(){
 }
 
 /* ---------------- Supabase data layer ---------------- */
-let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[]};
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[]};
 const ACTIVE=['setup','running','inspection'];
 const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
 
@@ -612,13 +651,17 @@ function buildState(){
       job:cur?.work_orders?.part_numbers?.part_no||null,
       operator:cur?first(cur.employees?.full_name):'—'};
   }).sort((a,b)=>a.code.localeCompare(b.code));
-  // jobs (dispatch board)
+  // jobs (dispatch board) — with routing/operation position
+  const opCount={};  // part_number_id -> total ops
+  RAW.operations.forEach(o=>{opCount[o.part_number_id]=(opCount[o.part_number_id]||0)+1;});
   state.jobs=jobsRaw.map(j=>{
     const f=fmtDue(j.work_orders?.due_at);
+    const pid=j.work_orders?.part_number_id;
     return {id:j.id,wo:j.work_orders?.wo_number||'—',
       part:j.work_orders?.part_numbers?.part_no||'—',qty:j.planned_qty,
       due:f.due,late:f.late,priority:j.work_orders?.priority||3,
-      machine:j.machines?.code||'—',operator:first(j.employees?.full_name),stage:j.stage};
+      machine:j.machines?.code||'—',operator:first(j.employees?.full_name),stage:j.stage,
+      opSeq:j.op_seq||1,opName:j.op_name||'',opTotal:opCount[pid]||0};
   }).sort((a,b)=>(a.priority-b.priority)||(a.wo>b.wo?1:-1));
   // WIP per machine (not done)
   state.wip=RAW.machines.map(m=>({machine:m.code,
@@ -659,6 +702,14 @@ function buildState(){
   const active=state.jobs.filter(j=>j.stage!=='done');
   const onTime=active.length?Math.round(100*active.filter(j=>!j.late).length/active.length):100;
   state.kpis={output:done+Math.round(wip*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4};
+  // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
+  const opOrder={}, opActive={};
+  RAW.operations.forEach(o=>{ if(!(o.op_name in opOrder)||o.seq<opOrder[o.op_name]) opOrder[o.op_name]=o.seq; });
+  jobsRaw.forEach(j=>{ if(j.stage!=='done'&&j.op_name){ opActive[j.op_name]=(opActive[j.op_name]||0)+1; } });
+  state.opWip=Object.keys(opOrder).map(name=>({name,seq:opOrder[name],count:opActive[name]||0}))
+    .sort((a,b)=>a.seq-b.seq||a.name.localeCompare(b.name));
+  // Parts (bearing master + routing length)
+  state.parts=RAW.parts.map(p=>({...p, ops:opCount[p.id]||0}));
 }
 
 async function loadFromSupabase(){
@@ -667,16 +718,17 @@ async function loadFromSupabase(){
     sb.from('machines').select('id,code,status,oee,oee_target,type_id,machine_types(name)'),
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
-    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,work_orders(id,wo_number,priority,due_at,part_numbers(part_no)),machines(code),employees(full_name)'),
+    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,part_numbers(part_no)),machines(code),employees(full_name)'),
     sb.from('downtime_logs').select('minutes,downtime_reasons(name)'),
-    sb.from('part_numbers').select('id,part_no,description,compatible_type_id').order('part_no'),
+    sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
+    sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
   ];
-  const [mt,mac,emp,sk,jb,dt,pt,sh]=await Promise.all(q);
-  const err=[mt,mac,emp,sk,jb,dt,pt,sh].find(r=>r.error);
+  const [mt,mac,emp,sk,jb,dt,pt,sh,po]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po].find(r=>r.error);
   if(err) throw err.error;
   RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,
-       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data};
+       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data};
   buildState();
 }
 
@@ -785,8 +837,10 @@ async function submitNewWO(){
     const wo=await sbInsert('work_orders',{wo_number:nextWO(),part_number_id:partId,quantity:qty,
       due_at,priority:parseInt($('#fPri').value,10),customer:$('#fCust').value||'',status:'in_progress'},true);
     const shiftA=(RAW.shifts.find(s=>s.name==='A')||RAW.shifts[0]||{}).id||null;
+    const firstOp=RAW.operations.filter(o=>o.part_number_id===partId).sort((a,b)=>a.seq-b.seq)[0];
     await sbInsert('job_assignments',{work_order_id:wo.id,machine_id:$('#fMac').value||null,
-      operator_id:$('#fOp').value||null,shift_id:shiftA,planned_qty:qty,stage:'queued'});
+      operator_id:$('#fOp').value||null,shift_id:shiftA,planned_qty:qty,stage:'queued',
+      op_seq:firstOp?firstOp.seq:1,op_name:firstOp?firstOp.op_name:null,op_machine_type_id:firstOp?firstOp.machine_type_id:null});
     closeModal(); await afterWrite('สร้าง '+wo.wo_number+' แล้ว');
   }catch(e){ console.error(e); toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
