@@ -396,7 +396,7 @@
       <div class="panel">
         <h2>บันทึกปัญหา / หยุดเดินเครื่อง <span class="tag">คิดเป็น Downtime</span><button class="addbtn" id="btnLogProblem" style="margin-left:auto">+ บันทึกปัญหา</button></h2>
         <table class="tbl" id="downtimeTbl">
-          <thead><tr><th>เวลา</th><th>Model</th><th>เครื่อง</th><th>สาเหตุ</th><th>นาที</th><th></th></tr></thead>
+          <thead><tr><th>เริ่ม</th><th>Model</th><th>เครื่อง</th><th>สาเหตุ</th><th>สถานะ / เวลา</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="hint">ปัญหาที่บันทึกจะรวมเข้ากราฟ Pareto (Control Room) และการวิเคราะห์คอขวด "ซ่อมบ่อย" อัตโนมัติ · เครื่องจักรไม่บังคับ (เช่นตอน Changeover)</div>
@@ -765,14 +765,22 @@ function renderDowntime(){
   const logs=state.downtimeLogs||[];
   if(!logs.length){ tb.innerHTML='<tr><td colspan="6" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกปัญหา</td></tr>'; return; }
   logs.forEach(d=>{
-    const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const when=d.started?new Date(d.started).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const open=!d.ended;
+    const elapsed=open?Math.max(0,Math.round((Date.now()-new Date(d.started).getTime())/60000)):d.minutes;
+    const stCell=open
+      ? `<span style="color:var(--down);font-family:var(--mono)"><span class="dot" style="background:var(--down);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>กำลังเกิด · ${elapsed} น.</span>`
+      : `<span style="color:var(--tx-dim);font-family:var(--mono)">จบแล้ว · ${d.minutes} น.</span>`;
+    const actCell=open
+      ? `<button class="addbtn dtresolve" data-dt="${d.id}" style="border-color:var(--run);color:var(--run)">ปกติ</button> <button class="addbtn dtdel" data-dt="${d.id}" style="border-color:var(--down);color:var(--down)">✕</button>`
+      : `<button class="addbtn dtdel" data-dt="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button>`;
     const tr=el('tr');
     tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
       <td style="font-family:var(--mono);font-weight:600">${d.model}</td>
       <td style="font-family:var(--mono)">${d.machine}</td>
       <td>${d.reason}</td>
-      <td style="font-family:var(--mono);color:var(--idle)">${d.minutes} น.</td>
-      <td><button class="addbtn dtdel" data-dt="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
+      <td>${stCell}</td>
+      <td>${actCell}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -890,6 +898,7 @@ function fmtDue(iso){
 }
 
 // transform RAW (from Supabase) -> state (shapes the render functions expect)
+function effMin(d){ if(d.ended_at) return d.minutes||0; const s=new Date(d.occurred_on).getTime(); return Math.max(0,Math.round((Date.now()-s)/60000)); }
 function cpkUpper(samples,usl){
   const n=samples.length; if(n<2||usl==null) return null;
   const mean=samples.reduce((a,b)=>a+b,0)/n;
@@ -927,10 +936,10 @@ function buildState(){
     .sort((a,b)=>a.machine.localeCompare(b.machine));
   // Pareto from downtime
   const agg={};
-  RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+(d.minutes||0);});
+  RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+effMin(d);});
   state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
   state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,machine:d.machines?.code||'—',model:d.model||'—',
-    reason:d.downtime_reasons?.name||'—',minutes:d.minutes||0,when:d.occurred_on})).slice(0,15);
+    reason:d.downtime_reasons?.name||'—',minutes:d.minutes||0,started:d.occurred_on,ended:d.ended_at||null})).slice(0,20);
   // People
   const roleLabel=['dept_manager'];
   state.people=RAW.employees.map(e=>{
@@ -1002,7 +1011,7 @@ function buildState(){
     .sort((a,b)=>a.seq-b.seq||a.name.localeCompare(b.name));
   // Bottleneck analysis — งานค้าง (WIP) + เวลาเสีย/ซ่อม ต่อขั้นตอน → ชี้สาเหตุ
   const dtByType={};
-  RAW.downtime.forEach(d=>{ const tn=typeNameById[d.machines?.type_id]; if(tn) dtByType[tn]=(dtByType[tn]||0)+(d.minutes||0); });
+  RAW.downtime.forEach(d=>{ const tn=typeNameById[d.machines?.type_id]; if(tn) dtByType[tn]=(dtByType[tn]||0)+effMin(d); });
   state.bottleneck=state.opWip.map(o=>({name:o.name,wip:o.count,downtime:dtByType[o.name]||0}));
   const maxWip=Math.max(0,...state.bottleneck.map(o=>o.wip));
   const maxDt=Math.max(0,...state.bottleneck.map(o=>o.downtime));
@@ -1023,7 +1032,7 @@ async function loadFromSupabase(){
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
     sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,line,target_day,target_month,note,part_numbers(part_no)),machines(code),employees(full_name)'),
-    sb.from('downtime_logs').select('id,minutes,occurred_on,model,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
+    sb.from('downtime_logs').select('id,minutes,occurred_on,ended_at,model,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
     sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
@@ -1067,6 +1076,7 @@ document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>go
 function tick(){
   const d=new Date();
   $('#clk').textContent=d.toLocaleTimeString('th-TH',{hour12:false});
+  const pv=$('#v-problem'); if(pv&&!pv.hidden&&typeof renderDowntime==='function') renderDowntime();
   $('#dte').textContent=d.toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'short',year:'numeric'});
 }
 setInterval(tick,1000);tick();
@@ -1547,14 +1557,14 @@ function openLogProblem(){
    <div class="field row2"><div><label>Model</label><div class="combo"><input id="dModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="dModelList" hidden></div></div></div>
      <div><label>เครื่องจักร <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><div class="combo"><input id="dMac" autocomplete="off" placeholder="เช่น IG401-RW"><div class="combo-list" id="dMacList" hidden></div></div></div></div>
    <div class="field"><label>สาเหตุ</label><select id="dReason">${causeOpts}</select></div>
-   <div class="field row2"><div><label>เวลาที่เสีย (นาที)</label><input id="dMin" type="number" min="0" value="15"></div>
-     <div><label>วันที่/เวลา</label><input id="dWhen" type="datetime-local"></div></div>`;
-  openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">บันทึก</button>`);
+   <div class="field"><label>เวลาที่เริ่มเกิด</label><input id="dWhen" type="datetime-local"></div>
+   <div class="hint2">กดบันทึก = เริ่มจับเวลาหยุด · เวลาจะนับไปเรื่อยๆ จนกดปุ่ม "ปกติ" ในตาราง ระบบจึงคิดจำนวนนาที</div>`;
+  openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">เริ่มจับเวลา</button>`);
   setupCombo($('#dMac'),$('#dMacList'),machines);
   setupCombo($('#dModel'),$('#dModelList'),models);
   const now=new Date(); now.setSeconds(0,0); $('#dWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#dSave').onclick=async()=>{
-    const reasonName=$('#dReason').value.trim(), min=parseInt($('#dMin').value,10)||0;
+    const reasonName=$('#dReason').value.trim();
     if(!reasonName) return toast('เลือกสาเหตุ','err');
     const code=$('#dMac').value.trim();
     const mac=code?RAW.machines.find(m=>m.code===code):null;
@@ -1565,10 +1575,17 @@ function openLogProblem(){
       if(!reasonId){ const r=await sbInsert('downtime_reasons',{name:reasonName},true); reasonId=r.id; }
       const dv=$('#dWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
       await sbInsert('downtime_logs',{machine_id:mac?mac.id:null,model:$('#dModel').value.trim()||null,
-        reason_id:reasonId,minutes:min,occurred_on});
-      closeModal(); await afterWrite('บันทึกปัญหาแล้ว');
+        reason_id:reasonId,minutes:0,occurred_on,ended_at:null});
+      closeModal(); await afterWrite('เริ่มจับเวลาปัญหาแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
   };
+}
+async function resolveProblem(id){
+  const d=RAW.downtime.find(x=>x.id===id); if(!d) return;
+  const min=Math.max(0,Math.round((Date.now()-new Date(d.occurred_on).getTime())/60000));
+  try{ await sbUpdate('downtime_logs',id,{ended_at:new Date().toISOString(),minutes:min});
+    await afterWrite('ปิดปัญหาแล้ว ('+min+' นาที)'); }
+  catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 async function delDowntime(id){
   try{ await sbDelete('downtime_logs',id); await afterWrite('ลบบันทึกแล้ว'); }
@@ -1585,7 +1602,10 @@ function wireFeatures(){
   $('#qcTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.qcdel'); if(b&&confirm('ลบผลตรวจนี้?')) delQuality(b.dataset.qc); });
   $('#qcLotSearch')?.addEventListener('input',()=>renderQcRecent());
   $('#prodTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.pddel'); if(b&&confirm('ลบบันทึกผลผลิตนี้?')) delProduction(b.dataset.pd); });
-  $('#downtimeTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.dtdel'); if(b&&confirm('ลบบันทึก downtime นี้?')) delDowntime(b.dataset.dt); });
+  $('#downtimeTbl')?.addEventListener('click',e=>{
+    const rb=e.target.closest('.dtresolve'); if(rb){ if(confirm('ปิดปัญหานี้เป็นปกติ? ระบบจะคิดเวลาหยุดถึงตอนนี้')) resolveProblem(rb.dataset.dt); return; }
+    const b=e.target.closest('.dtdel'); if(b&&confirm('ลบบันทึกปัญหานี้?')) delDowntime(b.dataset.dt);
+  });
   $('#fltText')?.addEventListener('input',()=>renderBoard());
   $('#fltPri')?.addEventListener('change',()=>renderBoard());
   $('#fltLate')?.addEventListener('change',()=>renderBoard());
