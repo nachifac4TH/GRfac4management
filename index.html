@@ -340,6 +340,7 @@
       <a data-v="machines"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Machines</a>
       <a data-v="people"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17.5 14c2.5 0 4.5 2 4.5 5"/></svg>People & Skills</a>
       <a data-v="parts"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>Parts &amp; Routing</a>
+      <a data-v="quality"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Quality &amp; SPC</a>
     </nav>
     <div class="shiftbox">
       <div class="k">Active Shift</div>
@@ -445,6 +446,32 @@
           <tbody></tbody>
         </table>
         <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้สเปก · ปุ่ม <b>ขั้นตอน</b> เพื่อจัดลำดับงานเจียร (routing)</div>
+      </div>
+    </section>
+
+    <section class="view" id="v-quality" hidden>
+      <div class="kpis" id="qcKpis" style="margin-bottom:16px"></div>
+      <div class="toolbar"><button class="addbtn" id="btnLogQC">+ บันทึกตรวจคุณภาพ</button>
+        <input id="qcLotSearch" class="fltinput" placeholder="สอบกลับ lot… พิมพ์เลข lot" style="max-width:220px"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>ของเสียแยกสาเหตุ <span class="tag">Defect Pareto</span></h2>
+          <div class="pareto" id="qcPareto"></div>
+        </div>
+        <div class="panel">
+          <h2>ความสามารถกระบวนการ <span class="tag">Cpk ต่อรุ่น</span></h2>
+          <table class="tbl" id="cpkTbl">
+            <thead><tr><th>รุ่น</th><th>n</th><th>Cpk กลม</th><th>Cpk Ra</th></tr></thead><tbody></tbody>
+          </table>
+          <div class="hint">Cpk ≥ 1.33 = ดี · 1.0–1.33 = เฝ้าระวัง · &lt; 1.0 = ไม่ผ่าน (ต้องมีตัวอย่าง ≥ 2)</div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>ผลตรวจล่าสุด <span class="tag" id="qcRecentTag">roundness / Ra / เสียง</span></h2>
+        <table class="tbl" id="qcTbl">
+          <thead><tr><th>เวลา</th><th>รุ่น</th><th>Lot</th><th>เครื่อง</th><th>ขั้น</th><th>กลม</th><th>Ra</th><th>เสียง</th><th>ผล</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
   </main>
@@ -745,6 +772,53 @@ function renderDowntime(){
     tb.appendChild(tr);
   });
 }
+function cpkCell(v){ if(v==null) return '<span style="color:var(--tx-faint)">—</span>';
+  const col=v>=1.33?'var(--run)':v>=1?'var(--idle)':'var(--down)';
+  return `<span style="font-family:var(--mono);color:${col};font-weight:600">${v>=9?'≥9':v}</span>`; }
+function renderQcRecent(){
+  const tb=$('#qcTbl tbody'); if(!tb) return; tb.innerHTML='';
+  const lot=($('#qcLotSearch')&&$('#qcLotSearch').value||'').trim().toLowerCase();
+  let logs=state.qcRecent||[];
+  if(lot) logs=logs.filter(q=>(q.lot||'').toLowerCase().includes(lot));
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="10" style="color:var(--tx-faint);padding:14px">ยังไม่มีผลตรวจ</td></tr>'; return; }
+  const RES={pass:['ผ่าน','var(--run)'],fail:['ไม่ผ่าน','var(--down)'],rework:['Rework','var(--idle)']};
+  logs.forEach(q=>{
+    const when=q.when?new Date(q.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const r=RES[q.result]||['—','var(--tx-dim)'];
+    const tr=el('tr');
+    tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
+      <td style="font-family:var(--mono);font-weight:600">${q.part}</td>
+      <td style="font-family:var(--mono);color:var(--cool)">${q.lot}</td>
+      <td style="font-family:var(--mono)">${q.machine}</td>
+      <td style="font-size:12px">${q.op}</td>
+      <td style="font-family:var(--mono)">${q.roundness??'—'}</td>
+      <td style="font-family:var(--mono)">${q.ra??'—'}</td>
+      <td style="font-family:var(--mono)">${q.anderon??'—'}</td>
+      <td><span style="color:${r[1]};font-family:var(--mono);font-size:12px">${r[0]}</span>${q.defect?`<br><span style="color:var(--tx-faint);font-size:10px">${q.defect}</span>`:''}</td>
+      <td><button class="addbtn qcdel" data-qc="${q.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+function renderQuality(){
+  if(!$('#qcKpis')) return;
+  const q=state.qc||{count:0,pass:0,fail:0,rework:0,passRate:100};
+  const kbox=$('#qcKpis'); kbox.innerHTML='';
+  [{k:'ผลตรวจทั้งหมด',v:q.count,meta:'ครั้ง',w:100,col:'var(--cool)'},
+   {k:'Pass Rate',v:q.passRate+'%',meta:`${q.pass} ผ่าน`,w:q.passRate,col:q.passRate>=95?'var(--run)':'var(--idle)'},
+   {k:'ไม่ผ่าน',v:q.fail,meta:'ครั้ง',w:q.count?100*q.fail/q.count:0,col:'var(--down)'},
+   {k:'Rework',v:q.rework,meta:'ครั้ง',w:q.count?100*q.rework/q.count:0,col:'var(--idle)'}
+  ].forEach(c=>{ const d=el('div','kpi'); d.innerHTML=`<div class="k">${c.k}</div><div class="v">${c.v}</div><div class="meta">${c.meta}</div><div class="bar"><i style="width:${c.w}%;background:${c.col}"></i></div>`; kbox.appendChild(d); });
+  const pbox=$('#qcPareto'); pbox.innerHTML='';
+  const pareto=state.qcPareto||[];
+  if(!pareto.length){ pbox.innerHTML='<div style="color:var(--tx-faint);padding:8px">ยังไม่มีของเสียบันทึกไว้</div>'; }
+  else{ const max=Math.max(1,...pareto.map(p=>p.count));
+    pareto.forEach(p=>{ const r=el('div','prow'); r.innerHTML=`<div class="nm">${p.name}</div><div class="track"><i style="width:${p.count/max*100}%"></i></div><div class="val">${p.count}</div>`; pbox.appendChild(r); }); }
+  const ct=$('#cpkTbl tbody'); ct.innerHTML='';
+  const cpk=state.qcCpk||[];
+  if(!cpk.length){ ct.innerHTML='<tr><td colspan="4" style="color:var(--tx-faint);padding:12px">ยังไม่พอคำนวณ (ต้องมีตัวอย่าง ≥ 2 ต่อรุ่น)</td></tr>'; }
+  else cpk.forEach(x=>{ const tr=el('tr'); tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${x.part}</td><td style="font-family:var(--mono)">${x.n}</td><td>${cpkCell(x.cpkRnd)}</td><td>${cpkCell(x.cpkRa)}</td>`; ct.appendChild(tr); });
+  renderQcRecent();
+}
 function renderProduction(){
   const tb=$('#prodTbl tbody'); if(!tb) return; tb.innerHTML='';
   const logs=state.productionLogs||[];
@@ -781,7 +855,7 @@ function renderBottleneck(){
 }
 function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
-  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();renderDowntime();renderProduction();
+  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();renderDowntime();renderProduction();renderQuality();
   if(typeof renderParts==='function') renderParts();
   const emps=(RAW&&RAW.employees)||[];
   const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
@@ -794,7 +868,7 @@ function setConn(){
 }
 
 /* ---------------- Supabase data layer ---------------- */
-let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[],reasons:[],production:[]};
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[],reasons:[],production:[],quality:[]};
 const ACTIVE=['setup','running','inspection'];
 const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
 
@@ -812,6 +886,13 @@ function fmtDue(iso){
 }
 
 // transform RAW (from Supabase) -> state (shapes the render functions expect)
+function cpkUpper(samples,usl){
+  const n=samples.length; if(n<2||usl==null) return null;
+  const mean=samples.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(samples.reduce((a,b)=>a+(b-mean)*(b-mean),0)/(n-1));
+  if(sd===0) return 9.99;
+  return +((usl-mean)/(3*sd)).toFixed(2);
+}
 function buildState(){
   const jobsRaw=RAW.jobs;
   // machines
@@ -892,6 +973,23 @@ function buildState(){
   }
   state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,machine:p.machines?.code||'—',
     shift:p.shifts?.name||'—',good:p.good_qty||0,scrap:p.scrap_qty||0,run:p.run_min||0,plan:p.planned_min||0,when:p.occurred_on}));
+  // Quality / SPC
+  const qc=RAW.quality||[];
+  const pass=qc.filter(q=>q.result==='pass').length;
+  state.qc={count:qc.length,pass,fail:qc.filter(q=>q.result==='fail').length,rework:qc.filter(q=>q.result==='rework').length,
+    passRate:qc.length?Math.round(100*pass/qc.length):100};
+  const dagg={}; qc.forEach(q=>{ if(q.result!=='pass'&&q.defect){ dagg[q.defect]=(dagg[q.defect]||0)+1; } });
+  state.qcPareto=Object.entries(dagg).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
+  const pInfo={}; RAW.parts.forEach(p=>pInfo[p.id]={no:p.part_no,tr:p.target_roundness,ra:p.target_ra});
+  const byPart={}; qc.forEach(q=>{ if(q.part_number_id){(byPart[q.part_number_id]=byPart[q.part_number_id]||[]).push(q);} });
+  state.qcCpk=Object.entries(byPart).map(([pid,list])=>{ const pi=pInfo[pid]||{};
+    return {part:pi.no||'—',n:list.length,
+      cpkRnd:cpkUpper(list.map(q=>q.roundness).filter(v=>v!=null),pi.tr),
+      cpkRa:cpkUpper(list.map(q=>q.ra).filter(v=>v!=null),pi.ra)};
+  }).filter(x=>x.cpkRnd!=null||x.cpkRa!=null).sort((a,b)=>a.part.localeCompare(b.part));
+  state.qcRecent=qc.slice(0,20).map(q=>({id:q.id,when:q.occurred_on,part:q.part_numbers?.part_no||'—',
+    lot:q.lot_no||'—',machine:q.machines?.code||'—',op:q.op_name||'—',roundness:q.roundness,ra:q.ra,
+    anderon:q.anderon,result:q.result,defect:q.defect}));
   // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
   const opOrder={}, opActive={};
   RAW.operations.forEach(o=>{ if(!(o.op_name in opOrder)||o.seq<opOrder[o.op_name]) opOrder[o.op_name]=o.seq; });
@@ -927,12 +1025,13 @@ async function loadFromSupabase(){
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
     sb.from('downtime_reasons').select('id,name').order('name'),
     sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,machines(code),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code)').order('occurred_on',{ascending:false}).limit(500),
   ];
-  const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl]=await Promise.all(q);
-  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl].find(r=>r.error);
+  const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc].find(r=>r.error);
   if(err) throw err.error;
   RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,
-       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data,reasons:rs.data,production:pl.data};
+       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data,reasons:rs.data,production:pl.data,quality:qc.data};
   buildState();
 }
 
@@ -952,7 +1051,8 @@ const TITLES={overview:['Control Room','ภาพรวมการผลิต�
   dispatch:['Dispatch Board','จ่ายงานและติดตามสถานะแบบ Kanban'],
   machines:['Machines','ทะเบียนและสถานะเครื่องจักร'],
   people:['People & Skills','บุคลากรและตารางความชำนาญ'],
-  parts:['Parts & Routing','ทะเบียนตลับลูกปืนและลำดับขั้นตอนเจียร']};
+  parts:['Parts & Routing','ทะเบียนตลับลูกปืนและลำดับขั้นตอนเจียร'],
+  quality:['Quality & SPC','คุณภาพ · roundness / Ra / เสียง · Cpk · สอบกลับ lot']};
 function go(v){
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='v-'+v);
@@ -1348,6 +1448,54 @@ async function saveRouting(pid,rows){
   }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 
+/* ================= Quality / SPC logging ================= */
+function openLogQuality(){
+  if(!live()) return;
+  const parts=RAW.parts.slice().sort((a,b)=>a.part_no.localeCompare(b.part_no)).map(p=>p.part_no);
+  const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
+  const ops=[...new Set(RAW.operations.map(o=>o.op_name))];
+  const opOpts='<option value="">—</option>'+ops.map(o=>`<option>${o}</option>`).join('');
+  const body=`
+   <div class="field row2"><div><label>รุ่น (part)</label><div class="combo"><input id="qPart" autocomplete="off" placeholder="เช่น 6205-IR"><div class="combo-list" id="qPartList" hidden></div></div></div>
+     <div><label>Lot / Batch</label><input id="qLot" placeholder="เช่น L2608-01"></div></div>
+   <div class="field row2"><div><label>เครื่อง</label><div class="combo"><input id="qMac" autocomplete="off" placeholder="เช่น IG401-RW"><div class="combo-list" id="qMacList" hidden></div></div></div>
+     <div><label>ขั้นตอน</label><select id="qOp">${opOpts}</select></div></div>
+   <div class="field"><label>ค่าที่วัด</label>
+     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+       <input id="qRnd" type="number" step="0.001" placeholder="กลม µm">
+       <input id="qRa" type="number" step="0.001" placeholder="Ra µm">
+       <input id="qAnd" type="number" step="0.001" placeholder="เสียง"></div>
+     <div class="hint2" id="qTgtHint">เลือกรุ่นเพื่อดูค่าเป้า</div></div>
+   <div class="field row2"><div><label>ผล</label><select id="qRes"><option value="pass">ผ่าน</option><option value="fail">ไม่ผ่าน</option><option value="rework">Rework</option></select></div>
+     <div><label>สาเหตุของเสีย</label><input id="qDef" placeholder="เช่น รางไม่กลม · ผิวไม่ผ่าน · grind burn"></div></div>`;
+  openModal('บันทึกผลตรวจคุณภาพ',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="qSave">บันทึก</button>`);
+  setupCombo($('#qPart'),$('#qPartList'),parts);
+  setupCombo($('#qMac'),$('#qMacList'),machines);
+  const chkAuto=()=>{
+    const p=RAW.parts.find(x=>x.part_no===$('#qPart').value.trim());
+    if(p) $('#qTgtHint').textContent=`เป้า: กลม ≤ ${p.target_roundness??'—'} µm · Ra ≤ ${p.target_ra??'—'} µm`;
+    const rnd=parseFloat($('#qRnd').value), ra=parseFloat($('#qRa').value);
+    if(p&&((p.target_roundness!=null&&rnd>p.target_roundness)||(p.target_ra!=null&&ra>p.target_ra))) $('#qRes').value='fail';
+  };
+  $('#qPart').addEventListener('input',chkAuto); $('#qRnd').addEventListener('input',chkAuto); $('#qRa').addEventListener('input',chkAuto);
+  $('#qSave').onclick=async()=>{
+    const p=RAW.parts.find(x=>x.part_no===$('#qPart').value.trim());
+    const mac=RAW.machines.find(x=>x.code===$('#qMac').value.trim());
+    const num=id=>{ const v=$(id).value.trim(); return v===''?null:parseFloat(v); };
+    const res=$('#qRes').value;
+    try{ await sbInsert('quality_checks',{part_number_id:p?p.id:null,machine_id:mac?mac.id:null,
+      lot_no:$('#qLot').value.trim()||null,op_name:$('#qOp').value||null,
+      roundness:num('#qRnd'),ra:num('#qRa'),anderon:num('#qAnd'),
+      result:res,defect:res==='pass'?null:($('#qDef').value.trim()||null)});
+      closeModal(); await afterWrite('บันทึกผลตรวจแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+  };
+}
+async function delQuality(id){
+  try{ await sbDelete('quality_checks',id); await afterWrite('ลบผลตรวจแล้ว'); }
+  catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
 /* ================= Production logging ================= */
 function openLogProduction(){
   if(!live()) return;
@@ -1426,6 +1574,9 @@ function wireFeatures(){
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
   $('#btnLogDt')?.addEventListener('click',openLogDowntime);
   $('#btnLogProd')?.addEventListener('click',openLogProduction);
+  $('#btnLogQC')?.addEventListener('click',openLogQuality);
+  $('#qcTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.qcdel'); if(b&&confirm('ลบผลตรวจนี้?')) delQuality(b.dataset.qc); });
+  $('#qcLotSearch')?.addEventListener('input',()=>renderQcRecent());
   $('#prodTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.pddel'); if(b&&confirm('ลบบันทึกผลผลิตนี้?')) delProduction(b.dataset.pd); });
   $('#downtimeTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.dtdel'); if(b&&confirm('ลบบันทึก downtime นี้?')) delDowntime(b.dataset.dt); });
   $('#fltText')?.addEventListener('input',()=>renderBoard());
