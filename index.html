@@ -336,6 +336,7 @@
       <div class="lbl">Operations</div>
       <a data-v="overview" class="on"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Control Room</a>
       <a data-v="dispatch"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="10"/><rect x="17" y="4" width="4" height="13"/></svg>Dispatch Board</a>
+      <a data-v="problem"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17v.5"/></svg>บันทึกปัญหา</a>
       <div class="lbl">Resources</div>
       <a data-v="machines"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Machines</a>
       <a data-v="people"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17.5 14c2.5 0 4.5 2 4.5 5"/></svg>People & Skills</a>
@@ -391,21 +392,24 @@
       <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
     </section>
 
+    <section class="view" id="v-problem" hidden>
+      <div class="panel">
+        <h2>บันทึกปัญหา / หยุดเดินเครื่อง <span class="tag">คิดเป็น Downtime</span><button class="addbtn" id="btnLogProblem" style="margin-left:auto">+ บันทึกปัญหา</button></h2>
+        <table class="tbl" id="downtimeTbl">
+          <thead><tr><th>เวลา</th><th>Model</th><th>เครื่อง</th><th>สาเหตุ</th><th>นาที</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="hint">ปัญหาที่บันทึกจะรวมเข้ากราฟ Pareto (Control Room) และการวิเคราะห์คอขวด "ซ่อมบ่อย" อัตโนมัติ · เครื่องจักรไม่บังคับ (เช่นตอน Changeover)</div>
+      </div>
+    </section>
+
     <section class="view" id="v-machines" hidden>
       <div class="panel">
-        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnLogDt" style="margin-left:8px">+ บันทึก Downtime</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
+        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
-          <thead><tr><th>Model</th><th>สาย (Line)</th><th>เครื่องจักร</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
+          <thead><tr><th>Model</th><th>สาย (Line)</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
           <tbody></tbody>
         </table>
-      </div>
-      <div class="panel" style="margin-top:16px">
-        <h2>Downtime ล่าสุด <span class="tag">เครื่องหยุด/ซ่อม</span></h2>
-        <table class="tbl" id="downtimeTbl">
-          <thead><tr><th>เวลา</th><th>เครื่อง</th><th>สาเหตุ</th><th>นาที</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <div class="hint">บันทึก downtime เพื่อให้กราฟ Pareto และการวิเคราะห์คอขวด "ซ่อมบ่อย" แม่นยำขึ้น</div>
       </div>
       <div class="panel" style="margin-top:16px">
         <h2>ผลผลิตล่าสุด <span class="tag">ดี/เสีย · เวลาเดิน → OEE จริง</span></h2>
@@ -628,7 +632,6 @@ function renderMachineTbl(){
     const tr=el('tr','clickable');tr.dataset.code=m.code;tr.title='คลิกเพื่อแก้สถานะ/OEE';
     tr.innerHTML=`<td><div style="font-family:var(--mono);font-weight:600">${m.model||'—'}</div><div style="font-family:var(--mono);font-size:10px;color:var(--tx-faint)">${m.code}</div></td>
       <td style="font-family:var(--mono);color:var(--cool)">${m.line||'—'}</td>
-      <td style="color:var(--tx-dim)">${m.type}</td>
       <td><span class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</span></td>
       <td style="font-family:var(--mono);color:${oeeColor(m.oee)};font-weight:600">${m.oee}%</td>
       <td>${m.job?`<b style="font-family:var(--mono)">${m.job}</b>`:'<span style="color:var(--tx-faint)">—</span>'}</td>
@@ -760,12 +763,13 @@ async function setStage(id, stage){
 function renderDowntime(){
   const tb=$('#downtimeTbl tbody'); if(!tb) return; tb.innerHTML='';
   const logs=state.downtimeLogs||[];
-  if(!logs.length){ tb.innerHTML='<tr><td colspan="5" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึก downtime</td></tr>'; return; }
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="6" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกปัญหา</td></tr>'; return; }
   logs.forEach(d=>{
     const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
     const tr=el('tr');
     tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
-      <td style="font-family:var(--mono);font-weight:600">${d.machine}</td>
+      <td style="font-family:var(--mono);font-weight:600">${d.model}</td>
+      <td style="font-family:var(--mono)">${d.machine}</td>
       <td>${d.reason}</td>
       <td style="font-family:var(--mono);color:var(--idle)">${d.minutes} น.</td>
       <td><button class="addbtn dtdel" data-dt="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
@@ -925,7 +929,7 @@ function buildState(){
   const agg={};
   RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+(d.minutes||0);});
   state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
-  state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,machine:d.machines?.code||'—',
+  state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,machine:d.machines?.code||'—',model:d.model||'—',
     reason:d.downtime_reasons?.name||'—',minutes:d.minutes||0,when:d.occurred_on})).slice(0,15);
   // People
   const roleLabel=['dept_manager'];
@@ -1019,7 +1023,7 @@ async function loadFromSupabase(){
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
     sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,line,target_day,target_month,note,part_numbers(part_no)),machines(code),employees(full_name)'),
-    sb.from('downtime_logs').select('id,minutes,occurred_on,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
+    sb.from('downtime_logs').select('id,minutes,occurred_on,model,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
     sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
@@ -1049,6 +1053,7 @@ async function boot(){
 /* ---------------- router + clock ---------------- */
 const TITLES={overview:['Control Room','ภาพรวมการผลิตแบบเรียลไทม์ · แผนกเจียร'],
   dispatch:['Dispatch Board','จ่ายงานและติดตามสถานะแบบ Kanban'],
+  problem:['บันทึกปัญหา','ปัญหา/หยุดเดินเครื่อง (คิดเป็น Downtime)'],
   machines:['Machines','ทะเบียนและสถานะเครื่องจักร'],
   people:['People & Skills','บุคลากรและตารางความชำนาญ'],
   parts:['Parts & Routing','ทะเบียนตลับลูกปืนและลำดับขั้นตอนเจียร'],
@@ -1532,34 +1537,36 @@ async function delProduction(id){
 }
 
 /* ================= Downtime logging ================= */
-function openLogDowntime(){
+const PROBLEM_CAUSES=['Changeover','Move Machine','เครื่องเสีย','Raceway Roundness','Raceway Shape','Bore Roundness','รอ QC','รอ Part change','รองานผลิต','ไม่มีช่าง'];
+function openLogProblem(){
   if(!live()) return;
   const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
-  const reasons=(RAW.reasons||[]).map(r=>r.name);
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
+  const causeOpts=PROBLEM_CAUSES.map(c=>`<option>${c}</option>`).join('');
   const body=`
-   <div class="field"><label>เครื่อง</label><div class="combo"><input id="dMac" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG401-RW"><div class="combo-list" id="dMacList" hidden></div></div></div>
-   <div class="field"><label>สาเหตุ</label><div class="combo"><input id="dReason" autocomplete="off" placeholder="เลือก หรือพิมพ์สาเหตุใหม่"><div class="combo-list" id="dReasonList" hidden></div></div></div>
-   <div class="field row2"><div><label>เวลาที่เสีย (นาที)</label><input id="dMin" type="number" min="1" value="30"></div>
-     <div><label>วันที่/เวลา</label><input id="dWhen" type="datetime-local"></div></div>
-   <div class="hint2">พิมพ์สาเหตุใหม่ที่ยังไม่มีได้ ระบบจะเพิ่มให้อัตโนมัติ</div>`;
-  openModal('บันทึก Downtime',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">บันทึก</button>`);
+   <div class="field row2"><div><label>Model</label><div class="combo"><input id="dModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="dModelList" hidden></div></div></div>
+     <div><label>เครื่องจักร <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><div class="combo"><input id="dMac" autocomplete="off" placeholder="เช่น IG401-RW"><div class="combo-list" id="dMacList" hidden></div></div></div></div>
+   <div class="field"><label>สาเหตุ</label><select id="dReason">${causeOpts}</select></div>
+   <div class="field row2"><div><label>เวลาที่เสีย (นาที)</label><input id="dMin" type="number" min="0" value="15"></div>
+     <div><label>วันที่/เวลา</label><input id="dWhen" type="datetime-local"></div></div>`;
+  openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">บันทึก</button>`);
   setupCombo($('#dMac'),$('#dMacList'),machines);
-  setupCombo($('#dReason'),$('#dReasonList'),reasons);
+  setupCombo($('#dModel'),$('#dModelList'),models);
   const now=new Date(); now.setSeconds(0,0); $('#dWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#dSave').onclick=async()=>{
-    const code=$('#dMac').value.trim(), reasonName=$('#dReason').value.trim(), min=parseInt($('#dMin').value,10)||0;
-    if(!code) return toast('เลือกเครื่อง','err');
-    if(!reasonName) return toast('กรอกสาเหตุ','err');
-    if(min<=0) return toast('กรอกจำนวนนาที','err');
-    const mac=RAW.machines.find(m=>m.code===code);
-    if(!mac) return toast('ไม่พบเครื่อง '+code,'err');
+    const reasonName=$('#dReason').value.trim(), min=parseInt($('#dMin').value,10)||0;
+    if(!reasonName) return toast('เลือกสาเหตุ','err');
+    const code=$('#dMac').value.trim();
+    const mac=code?RAW.machines.find(m=>m.code===code):null;
+    if(code&&!mac) return toast('ไม่พบเครื่อง '+code+' (เว้นว่างได้ถ้าไม่มี)','err');
     try{
       let reason=(RAW.reasons||[]).find(r=>r.name===reasonName);
       let reasonId=reason?reason.id:null;
       if(!reasonId){ const r=await sbInsert('downtime_reasons',{name:reasonName},true); reasonId=r.id; }
       const dv=$('#dWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
-      await sbInsert('downtime_logs',{machine_id:mac.id,reason_id:reasonId,minutes:min,occurred_on});
-      closeModal(); await afterWrite('บันทึก downtime แล้ว');
+      await sbInsert('downtime_logs',{machine_id:mac?mac.id:null,model:$('#dModel').value.trim()||null,
+        reason_id:reasonId,minutes:min,occurred_on});
+      closeModal(); await afterWrite('บันทึกปัญหาแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
   };
 }
@@ -1572,7 +1579,7 @@ async function delDowntime(id){
 function wireFeatures(){
   $('#btnNewWO')?.addEventListener('click',openNewWO);
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
-  $('#btnLogDt')?.addEventListener('click',openLogDowntime);
+  $('#btnLogProblem')?.addEventListener('click',openLogProblem);
   $('#btnLogProd')?.addEventListener('click',openLogProduction);
   $('#btnLogQC')?.addEventListener('click',openLogQuality);
   $('#qcTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.qcdel'); if(b&&confirm('ลบผลตรวจนี้?')) delQuality(b.dataset.qc); });
