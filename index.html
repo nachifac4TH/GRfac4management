@@ -291,6 +291,27 @@
   .combo-item{padding:8px 11px;font-family:var(--mono);font-size:12px;cursor:pointer;color:var(--tx-dim)}
   .combo-item:hover,.combo-item.active{background:var(--cool-bg);color:var(--tx)}
   .combo-empty{padding:8px 11px;font-size:11px;color:var(--tx-faint)}
+  /* bottleneck panel */
+  .bnhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .bnhead .t{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:.03em;margin-right:4px}
+  .bnverdict{font-family:var(--mono);font-size:11.5px;padding:5px 11px;border-radius:var(--r-sm);border:1px solid}
+  .bnverdict.maint{color:var(--down);border-color:var(--down);background:var(--down-bg)}
+  .bnverdict.proc{color:var(--idle);border-color:var(--idle);background:var(--idle-bg)}
+  .bnverdict.ok{color:var(--run);border-color:var(--run);background:var(--run-bg)}
+  .bnlate{font-family:var(--mono);font-size:11.5px;color:var(--tx-dim);margin-left:auto}
+  .bnlate b{color:var(--down);font-size:14px}
+  .bngrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .bncell{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:var(--r-sm);padding:9px 12px}
+  .bncell.hot{border-color:var(--down);background:var(--down-bg)}
+  .bncell .op{font-family:var(--mono);font-size:10.5px;color:var(--tx-dim);letter-spacing:.04em;text-transform:uppercase}
+  .bncell .wipn{font-family:var(--disp);font-size:22px;font-weight:600;margin-top:1px}
+  .bncell .wipn small{font-size:11px;color:var(--tx-faint);font-weight:400}
+  .bncell .dt{font-family:var(--mono);font-size:10px;color:var(--tx-faint);margin-top:3px}
+  .bncell .dt b{color:var(--idle)}
+  .card .ln{color:var(--cool);font-family:var(--mono)}
+  .card .td{color:var(--tx-faint);font-size:10px}
+  .card .note{font-size:11px;color:var(--idle);background:var(--idle-bg);border:1px solid rgba(227,160,8,.32);
+    border-radius:4px;padding:3px 8px;margin-top:6px;word-break:break-word}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -349,7 +370,8 @@
     </section>
 
     <section class="view" id="v-dispatch" hidden>
-      <div class="toolbar"><button class="addbtn" id="btnNewWO">+ จ่ายงานใหม่</button></div>
+      <div class="toolbar"><button class="addbtn" id="btnNewWO">+ เพิ่มงานตามแผน</button></div>
+      <div class="panel bnpanel" id="bnPanel" style="margin-bottom:16px;padding:14px 16px"></div>
       <div class="board" id="board"></div>
       <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
     </section>
@@ -586,8 +608,9 @@ function renderBoard(){
       const i=STAGES.findIndex(x=>x[0]===j.stage);
       const card=el('div',`card p${j.priority}`);card.draggable=true;card.dataset.id=j.id;
       card.innerHTML=`<div class="top"><span class="wo">${j.wo}</span><span class="pri">P${j.priority}</span></div>
-        <div class="part">Part <b>${j.part}</b> · ${j.qty} ชิ้น</div>
+        <div class="part">Part <b>${j.part}</b>${j.line?` · <span class="ln">${j.line}</span>`:''} · ${j.qty} ชิ้น${j.targetDay?` <span class="td">(/วัน ${j.targetDay})</span>`:''}</div>
         ${j.opTotal?`<div class="op">ขั้น ${j.opSeq}/${j.opTotal} · ${j.opName}</div>`:''}
+        ${j.note?`<div class="note">${j.note}</div>`:''}
         <div class="row"><span>ครบกำหนด</span><span class="due ${j.late?'late':''}">${j.due}</span></div>
         <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.machine}</div></div>
         <div class="mv"><button ${i===0?'disabled':''} data-mv="-1">◀</button>
@@ -648,9 +671,26 @@ async function setStage(id, stage){
   if(error){ console.error(error); rj.stage=prev; buildState(); renderAll(); }  // rollback
 }
 
+function renderBottleneck(){
+  const box=$('#bnPanel'); if(!box) return;
+  const info=state.bottleneckInfo||{}; const cells=state.bottleneck||[];
+  const CAUSE={maintenance:['เครื่องเสีย / ซ่อมบ่อย','maint'],process:['กระบวนการผลิต (งานไหลไม่ทัน)','proc']};
+  let verdict;
+  if(!info.op){ verdict='<span class="bnverdict ok">ไม่มีคอขวด · งานไหลปกติ</span>'; }
+  else{ const cv=CAUSE[info.cause]||['—','proc'];
+    verdict=`<span class="bnverdict ${cv[1]}">คอขวด: ${info.op} — เกิดจาก ${cv[0]}</span>`; }
+  const late=info.lateCount?`<span class="bnlate">งานล่าช้า <b>${info.lateCount}</b> ใบ</span>`:'<span class="bnlate">ไม่มีงานล่าช้า</span>';
+  const grid=cells.map(c=>{
+    const hot=info.op===c.name;
+    return `<div class="bncell${hot?' hot':''}"><div class="op">${c.name}</div>
+      <div class="wipn">${c.wip}<small> งานค้าง</small></div>
+      <div class="dt">เวลาเสีย/ซ่อม <b>${c.downtime}</b> นาที</div></div>`;
+  }).join('');
+  box.innerHTML=`<div class="bnhead"><span class="t">สถานะ &amp; คอขวด</span>${verdict}${late}</div><div class="bngrid">${grid}</div>`;
+}
 function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
-  renderMachineTbl();renderPeople();renderSkills();renderBoard();
+  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();
   if(typeof renderParts==='function') renderParts();
   const emps=(RAW&&RAW.employees)||[];
   const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
@@ -700,6 +740,8 @@ function buildState(){
     return {id:j.id,wo:j.work_orders?.wo_number||'—',
       part:j.work_orders?.part_numbers?.part_no||'—',qty:j.planned_qty,
       due:f.due,late:f.late,priority:j.work_orders?.priority||3,
+      line:j.work_orders?.line||'',targetDay:j.work_orders?.target_day||null,
+      targetMonth:j.work_orders?.target_month||null,note:j.work_orders?.note||'',
       machine:j.machines?.code||'—',operator:first(j.employees?.full_name),stage:j.stage,
       opSeq:j.op_seq||1,opName:j.op_name||'',opTotal:opCount[pid]||0};
   }).sort((a,b)=>(a.priority-b.priority)||(a.wo>b.wo?1:-1));
@@ -748,6 +790,18 @@ function buildState(){
   jobsRaw.forEach(j=>{ if(j.stage!=='done'&&j.op_name){ opActive[j.op_name]=(opActive[j.op_name]||0)+1; } });
   state.opWip=Object.keys(opOrder).map(name=>({name,seq:opOrder[name],count:opActive[name]||0}))
     .sort((a,b)=>a.seq-b.seq||a.name.localeCompare(b.name));
+  // Bottleneck analysis — งานค้าง (WIP) + เวลาเสีย/ซ่อม ต่อขั้นตอน → ชี้สาเหตุ
+  const dtByType={};
+  RAW.downtime.forEach(d=>{ const tn=typeNameById[d.machines?.type_id]; if(tn) dtByType[tn]=(dtByType[tn]||0)+(d.minutes||0); });
+  state.bottleneck=state.opWip.map(o=>({name:o.name,wip:o.count,downtime:dtByType[o.name]||0}));
+  const maxWip=Math.max(0,...state.bottleneck.map(o=>o.wip));
+  const maxDt=Math.max(0,...state.bottleneck.map(o=>o.downtime));
+  const bnOp=state.bottleneck.find(o=>o.wip===maxWip&&maxWip>0)||null;
+  let cause=null;
+  if(bnOp) cause=(bnOp.downtime>0&&bnOp.downtime>=maxDt*0.6)?'maintenance':'process';
+  const lateCount=state.jobs.filter(j=>j.stage!=='done'&&j.late).length;
+  state.bottleneckInfo={op:bnOp?bnOp.name:null,cause,maxWip,maxDt,lateCount,
+    downtime:bnOp?bnOp.downtime:0};
   // Parts (bearing master + routing length)
   state.parts=RAW.parts.map(p=>({...p, ops:opCount[p.id]||0}));
 }
@@ -758,8 +812,8 @@ async function loadFromSupabase(){
     sb.from('machines').select('id,code,status,oee,oee_target,type_id,line,model,machine_types(name)'),
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
-    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,part_numbers(part_no)),machines(code),employees(full_name)'),
-    sb.from('downtime_logs').select('minutes,downtime_reasons(name)'),
+    sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,line,target_day,target_month,note,part_numbers(part_no)),machines(code),employees(full_name)'),
+    sb.from('downtime_logs').select('minutes,downtime_reasons(name),machines(type_id)'),
     sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
@@ -852,37 +906,53 @@ function localDatetime(d){ return new Date(d.getTime()-d.getTimezoneOffset()*600
 /* ---- New Work Order + dispatch ---- */
 function openNewWO(){
   if(!live()) return; refreshTypeMaps();
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
+  const lines=[...new Set(RAW.machines.map(m=>m.line).filter(Boolean))].sort();
   const body=`
-   <div class="field"><label>Part</label><select id="fPart">${partOptions()}</select></div>
-   <div class="field row2">
-     <div><label>จำนวน (ชิ้น)</label><input id="fQty" type="number" min="1" value="100"></div>
-     <div><label>ความสำคัญ</label><select id="fPri"><option value="1">P1 สูงสุด</option><option value="2">P2</option><option value="3" selected>P3</option></select></div></div>
-   <div class="field"><label>ครบกำหนด</label><input id="fDue" type="datetime-local"></div>
-   <div class="field"><label>ลูกค้า</label><input id="fCust" type="text" placeholder="เช่น ACME"></div>
-   <div class="field"><label>เครื่อง (จ่ายเลย หรือเว้นว่าง)</label><select id="fMac">${machineOptions('')}</select></div>
-   <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="fOp">${operatorOptions(null,null)}</select>
-     <div class="hint2" id="opHint">เลือกเครื่องก่อน ระบบจะเรียงช่างที่ทักษะตรงประเภทเครื่องขึ้นก่อน</div></div>`;
-  openModal('จ่ายงานใหม่ · New Work Order',body,
-    `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="fSave">สร้าง + จ่ายงาน</button>`);
-  const d=new Date(Date.now()+8*3600e3); d.setSeconds(0,0); $('#fDue').value=localDatetime(d);
-  $('#fMac').onchange=()=>{ const opt=$('#fMac').selectedOptions[0]; const tid=opt?opt.dataset.type:'';
-    $('#fOp').innerHTML=operatorOptions(tid||null,$('#fOp').value||null);
-    $('#opHint').textContent=tid?'เรียงช่างที่ทักษะสูงสุดสำหรับเครื่องนี้ก่อน (✓ = แนะนำ)':'ยังไม่เลือกเครื่อง'; };
+   <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="fModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="fModelList" hidden></div></div></div>
+     <div><label>Line</label><div class="combo"><input id="fLine" autocomplete="off" placeholder="เช่น IG401 / OG401"><div class="combo-list" id="fLineList" hidden></div></div></div></div>
+   <div class="field row2"><div><label>เป้า/วัน (ชิ้น)</label><input id="fTday" type="number" min="0" value="0"></div>
+     <div><label>เป้า/เดือน (ชิ้น)</label><input id="fTmon" type="number" min="0" value="0"></div></div>
+   <div class="field row2"><div><label>ความสำคัญ</label><select id="fPri"><option value="1">P1 สูงสุด</option><option value="2" selected>P2</option><option value="3">P3</option></select></div>
+     <div><label>ครบกำหนด</label><input id="fDue" type="date"></div></div>
+   <div class="field"><label>หมายเหตุ / กำกับงาน</label><input id="fNote" type="text" placeholder="เช่น งานเร่ง · ลูกค้า NSK · ล็อตพิเศษ"></div>
+   <div class="hint2">Line ขึ้นต้น IG = วงใน (-IR) · OG = วงนอก (-OR) — ระบบจับคู่ part และจ่ายเข้าสถานีต้นสายให้อัตโนมัติ</div>`;
+  openModal('เพิ่มงานตามแผน · Production Plan',body,
+    `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="fSave">สร้างงาน</button>`);
+  setupCombo($('#fModel'),$('#fModelList'),models);
+  setupCombo($('#fLine'),$('#fLineList'),lines);
+  const now=new Date(); const eom=new Date(now.getFullYear(),now.getMonth()+1,0);
+  $('#fDue').value=new Date(eom.getTime()-eom.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  $('#fTday').oninput=()=>{ const d=parseInt($('#fTday').value,10)||0; if(d>0&&!$('#fTmon').dataset.touched) $('#fTmon').value=d*26; };
+  $('#fTmon').oninput=()=>{ $('#fTmon').dataset.touched='1'; };
   $('#fSave').onclick=submitNewWO;
 }
 async function submitNewWO(){
   try{
-    const partId=$('#fPart').value, qty=parseInt($('#fQty').value,10)||0;
-    if(!partId||qty<=0) return toast('กรอก Part และจำนวนให้ครบ','err');
-    const dv=$('#fDue').value; const due_at=dv?new Date(dv).toISOString():null;
-    const wo=await sbInsert('work_orders',{wo_number:nextWO(),part_number_id:partId,quantity:qty,
-      due_at,priority:parseInt($('#fPri').value,10),customer:$('#fCust').value||'',status:'in_progress'},true);
+    const model=$('#fModel').value.trim(), line=$('#fLine').value.trim();
+    const tday=parseInt($('#fTday').value,10)||0, tmon=parseInt($('#fTmon').value,10)||0;
+    if(!model) return toast('เลือก Model','err');
+    if(!line) return toast('เลือก Line','err');
+    const comp=/^OG/i.test(line)?'OR':'IR';
+    const partNo=model+'-'+comp;
+    const part=RAW.parts.find(p=>p.part_no===partNo);
+    if(!part) return toast('ไม่พบ part '+partNo+' — ตรวจ Model/Line','err');
+    const qty=tmon||tday;
+    if(qty<=0) return toast('กรอกเป้า/วัน หรือ /เดือน','err');
+    const dv=$('#fDue').value; const due_at=dv?new Date(dv+'T17:00:00').toISOString():null;
+    const wo=await sbInsert('work_orders',{wo_number:nextWO(),part_number_id:part.id,quantity:qty,
+      due_at,priority:parseInt($('#fPri').value,10),customer:'',status:'in_progress',
+      line,target_day:tday||null,target_month:tmon||null,note:$('#fNote').value.trim()||null},true);
     const shiftA=(RAW.shifts.find(s=>s.name==='A')||RAW.shifts[0]||{}).id||null;
-    const firstOp=RAW.operations.filter(o=>o.part_number_id===partId).sort((a,b)=>a.seq-b.seq)[0];
-    await sbInsert('job_assignments',{work_order_id:wo.id,machine_id:$('#fMac').value||null,
-      operator_id:$('#fOp').value||null,shift_id:shiftA,planned_qty:qty,stage:'queued',
+    const firstOp=RAW.operations.filter(o=>o.part_number_id===part.id).sort((a,b)=>a.seq-b.seq)[0];
+    const OPCODE={'Raceway':'RW','Bore':'BR','Auto check':'AC','Honing':'HN'};
+    let machineId=null;
+    if(firstOp){ const oc=OPCODE[firstOp.op_name]||(firstOp.op_name||'').replace(/\s/g,'').slice(0,2).toUpperCase();
+      const m=RAW.machines.find(x=>x.code===line+'-'+oc); machineId=m?m.id:null; }
+    await sbInsert('job_assignments',{work_order_id:wo.id,machine_id:machineId,operator_id:null,
+      shift_id:shiftA,planned_qty:qty,stage:'queued',
       op_seq:firstOp?firstOp.seq:1,op_name:firstOp?firstOp.op_name:null,op_machine_type_id:firstOp?firstOp.machine_type_id:null});
-    closeModal(); await afterWrite('สร้าง '+wo.wo_number+' แล้ว');
+    closeModal(); await afterWrite('สร้าง '+wo.wo_number+' ('+partNo+' @ '+line+')');
   }catch(e){ console.error(e); toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 
@@ -895,13 +965,16 @@ function openAssign(id){
    <div class="field"><label>เครื่อง</label><select id="aMac">${machineOptions(rj.machine_id)}</select></div>
    <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="aOp">${operatorOptions(curType||null,rj.operator_id)}</select>
      <div class="hint2">ช่างที่มี skill ≥2 สำหรับเครื่องนี้ = แนะนำ (✓)</div></div>
-   <div class="field"><label>สถานะงาน</label><select id="aStage">${STAGES.map(s=>`<option value="${s[0]}" ${s[0]===rj.stage?'selected':''}>${s[1]}</option>`).join('')}</select></div>`;
+   <div class="field"><label>สถานะงาน</label><select id="aStage">${STAGES.map(s=>`<option value="${s[0]}" ${s[0]===rj.stage?'selected':''}>${s[1]}</option>`).join('')}</select></div>
+   <div class="field"><label>หมายเหตุ / กำกับงาน</label><input id="aNote" type="text" value="${(rj.work_orders?.note||'').replace(/"/g,'&quot;')}" placeholder="เช่น งานเร่ง · รอวัตถุดิบ · ล็อตพิเศษ"></div>`;
   openModal('จ่ายงาน · '+(rj.work_orders?.wo_number||''),body,
     `<button class="btn danger" id="aDel">ลบงาน</button><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="aSave">บันทึก</button>`);
   $('#aMac').onchange=()=>{ const opt=$('#aMac').selectedOptions[0]; const tid=opt?opt.dataset.type:'';
     $('#aOp').innerHTML=operatorOptions(tid||null,$('#aOp').value||null); };
   $('#aSave').onclick=async()=>{ try{
       await sbUpdate('job_assignments',id,{machine_id:$('#aMac').value||null,operator_id:$('#aOp').value||null,stage:$('#aStage').value});
+      const woId=rj.work_order_id||rj.work_orders?.id||null;
+      if(woId) await sbUpdate('work_orders',woId,{note:$('#aNote').value.trim()||null});
       closeModal(); await afterWrite('อัปเดตงานแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
   $('#aDel').onclick=async()=>{ if(!confirm('ลบงานนี้? (ลบทั้ง work order และการจ่ายงาน)')) return; try{
