@@ -552,7 +552,7 @@ function renderPeople(){
   const roleMap={dept_manager:['หัวหน้าแผนก','lead'],shift_leader:['หัวหน้ากะ','shift'],
     lead_technician:['หัวหน้าช่าง','lead'],operator:['ช่างประจำจุด','']};
   state.people.forEach(p=>{
-    const [rn,rc]=roleMap[p.role]||[p.role,''];const tr=el('tr');
+    const [rn,rc]=roleMap[p.role]||[p.role,''];const tr=el('tr','clickable');tr.dataset.emp=p.id;tr.title='คลิกเพื่อแก้ไข/ลบ';
     tr.innerHTML=`<td><div class="who2"><div class="av">${initials(p.full_name)}</div><div class="nm">${p.full_name}</div></div></td>
       <td><span class="rolechip ${rc}">${rn}</span></td>
       <td style="font-family:var(--mono);color:var(--tx-dim)">${p.shift}</td>
@@ -713,9 +713,9 @@ function buildState(){
   state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
   // People
   const roleLabel=['dept_manager'];
-  state.people=RAW.employees.filter(e=>e.role!=='dept_manager').map(e=>{
+  state.people=RAW.employees.map(e=>{
     const held=jobsRaw.find(j=>j.operator_id===e.id&&ACTIVE.includes(j.stage));
-    return {full_name:e.full_name,role:e.role,shift:e.shifts?.name||'—',
+    return {id:e.id,code:e.code,full_name:e.full_name,role:e.role,shift:e.shifts?.name||'—',shift_id:e.shift_id||null,
       holds:held?`${held.work_orders?.wo_number} @ ${held.machines?.code||'?'}`:'—'};
   });
   // Skill matrix — build from employees (operator/lead) so new people show up immediately
@@ -991,6 +991,27 @@ function openEditMachine(code){
 }
 
 /* ---- Add employee ---- */
+function openEditEmp(id){
+  if(!live()) return; const p=state.people.find(x=>x.id===id); if(!p) return;
+  const roles=[['operator','ช่างประจำจุด'],['lead_technician','หัวหน้าช่าง'],['shift_leader','หัวหน้ากะ'],['dept_manager','หัวหน้าแผนก']];
+  const roleOpts=roles.map(r=>`<option value="${r[0]}" ${r[0]===p.role?'selected':''}>${r[1]}</option>`).join('');
+  const shiftOpts='<option value="">—</option>'+RAW.shifts.map(s=>`<option value="${s.id}" ${s.id===p.shift_id?'selected':''}>${s.name}</option>`).join('');
+  const body=`
+   <div class="field row2"><div><label>รหัสพนักงาน</label><input id="epCode" value="${p.code||''}" disabled></div>
+     <div><label>กะ</label><select id="epShift">${shiftOpts}</select></div></div>
+   <div class="field"><label>ชื่อ-สกุล</label><input id="epName" value="${(p.full_name||'').replace(/"/g,'&quot;')}"></div>
+   <div class="field"><label>บทบาท</label><select id="epRole">${roleOpts}</select></div>`;
+  openModal('แก้ไขบุคลากร · '+(p.full_name||''),body,
+    `<button class="btn danger" id="epDel">ลบ</button><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="epSave">บันทึก</button>`);
+  $('#epSave').onclick=async()=>{ const name=$('#epName').value.trim(); if(!name) return toast('กรอกชื่อ','err');
+    try{ await sbUpdate('employees',id,{full_name:name,role:$('#epRole').value,shift_id:$('#epShift').value||null});
+      closeModal(); await afterWrite('อัปเดตบุคลากรแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+  $('#epDel').onclick=async()=>{ if(!confirm('ลบ '+p.full_name+'? (skill จะถูกลบ · งานที่ถืออยู่จะถูกปลดผู้รับผิดชอบ)')) return;
+    try{ await sbDelete('employees',id); closeModal(); await afterWrite('ลบบุคลากรแล้ว'); }
+    catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+
 function openAddEmp(){
   if(!live()) return;
   const roleOpts=[['operator','ช่างประจำจุด'],['lead_technician','หัวหน้าช่าง'],['shift_leader','หัวหน้ากะ']].map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('');
@@ -1149,6 +1170,7 @@ function wireFeatures(){
   $('#btnNewWO')?.addEventListener('click',openNewWO);
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
   $('#btnAddEmp')?.addEventListener('click',openAddEmp);
+  $('#peopleTbl')?.addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.emp) openEditEmp(tr.dataset.emp); });
   $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#overlay').hidden) closeModal(); });
   $('#board').addEventListener('click',e=>{ const b=e.target.closest('.asg'); if(b){ e.stopPropagation(); openAssign(b.dataset.asg);} });
