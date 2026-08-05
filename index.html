@@ -315,7 +315,7 @@
     <div class="shiftbox">
       <div class="k">Active Shift</div>
       <div class="v">A · 06–14</div>
-      <div class="lead">หัวหน้ากะ: สมชาย จ.</div>
+      <div class="lead" id="shiftLead">หัวหน้า: —</div>
     </div>
   </aside>
 
@@ -652,6 +652,9 @@ function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
   renderMachineTbl();renderPeople();renderSkills();renderBoard();
   if(typeof renderParts==='function') renderParts();
+  const emps=(RAW&&RAW.employees)||[];
+  const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
+  const sl=$('#shiftLead'); if(sl) sl.textContent = head? 'หัวหน้า: '+head.full_name : 'หัวหน้า: —';
 }
 function setConn(){
   const c=$('#conn');
