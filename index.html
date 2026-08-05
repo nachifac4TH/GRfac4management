@@ -312,6 +312,14 @@
   .card .td{color:var(--tx-faint);font-size:10px}
   .card .note{font-size:11px;color:var(--idle);background:var(--idle-bg);border:1px solid rgba(227,160,8,.32);
     border-radius:4px;padding:3px 8px;margin-top:6px;word-break:break-word}
+  /* filter bar */
+  .fltbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .fltinput{background:var(--bg-2);border:1px solid var(--line);color:var(--tx);border-radius:var(--r-sm);
+    padding:8px 11px;font-family:var(--body);font-size:13px;outline:none}
+  .fltinput:focus{border-color:var(--cool)}
+  #fltText{min-width:240px;flex:1;max-width:340px}
+  .fltchk{font-family:var(--mono);font-size:12px;color:var(--tx-dim);display:flex;align-items:center;gap:6px;cursor:pointer}
+  .fltcount{font-family:var(--mono);font-size:11px;color:var(--tx-faint);margin-left:auto}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -372,17 +380,39 @@
     <section class="view" id="v-dispatch" hidden>
       <div class="toolbar"><button class="addbtn" id="btnNewWO">+ เพิ่มงานตามแผน</button></div>
       <div class="panel bnpanel" id="bnPanel" style="margin-bottom:16px;padding:14px 16px"></div>
+      <div class="fltbar">
+        <input id="fltText" class="fltinput" placeholder="ค้นหา WO / Model / Line / หมายเหตุ…">
+        <select id="fltPri" class="fltinput"><option value="">ทุกความสำคัญ</option><option value="1">P1 สูงสุด</option><option value="2">P2</option><option value="3">P3</option></select>
+        <label class="fltchk"><input type="checkbox" id="fltLate"> เฉพาะงานล่าช้า</label>
+        <span class="fltcount" id="fltCount"></span>
+      </div>
       <div class="board" id="board"></div>
       <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
     </section>
 
     <section class="view" id="v-machines" hidden>
       <div class="panel">
-        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><button class="addbtn" id="btnAddMachine">+ เพิ่มเครื่อง</button></h2>
+        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnLogDt" style="margin-left:8px">+ บันทึก Downtime</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
           <thead><tr><th>Model</th><th>สาย (Line)</th><th>เครื่องจักร</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Downtime ล่าสุด <span class="tag">เครื่องหยุด/ซ่อม</span></h2>
+        <table class="tbl" id="downtimeTbl">
+          <thead><tr><th>เวลา</th><th>เครื่อง</th><th>สาเหตุ</th><th>นาที</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="hint">บันทึก downtime เพื่อให้กราฟ Pareto และการวิเคราะห์คอขวด "ซ่อมบ่อย" แม่นยำขึ้น</div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>ผลผลิตล่าสุด <span class="tag">ดี/เสีย · เวลาเดิน → OEE จริง</span></h2>
+        <table class="tbl" id="prodTbl">
+          <thead><tr><th>เวลา</th><th>เครื่อง</th><th>กะ</th><th>ดี</th><th>เสีย</th><th>เดิน/แผน (น.)</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="hint">พอมีบันทึกผลผลิต ระบบจะใช้คำนวณ OEE / Output / Scrap จริง (แทนค่าประมาณ) บน Control Room</div>
       </div>
     </section>
 
@@ -504,17 +534,18 @@ function renderKpis(){
   const k=state.kpis, box=$('#kpis'); box.innerHTML='';
   const outPct=k.target?Math.round(k.output/k.target*100):0;
   const oeeDelta=k.avg_oee-k.oee_target;
+  const src=k.real?' · <span class="up">จากบันทึกจริง</span>':' · <span style="color:var(--tx-faint)">ค่าประมาณ</span>';
   const cards=[
     {k:'Output vs Target',v:`${k.output}<small> / ${k.target}</small>`,
-      meta:`${outPct}% ของเป้ากะ`, w:outPct, col:outPct>=80?'var(--run)':'var(--idle)'},
+      meta:`${outPct}% ของเป้ากะ${src}`, w:outPct, col:outPct>=80?'var(--run)':'var(--idle)'},
     {k:'Avg OEE',v:`<span class="${k.avg_oee>=k.oee_target?'up':'warn'}">${k.avg_oee}<small>%</small></span>`,
-      meta:`เป้า ${k.oee_target}% · <span class="${oeeDelta>=0?'up':'bad'}">${oeeDelta>=0?'+':''}${oeeDelta}</span>`,
+      meta:`เป้า ${k.oee_target}% · <span class="${oeeDelta>=0?'up':'bad'}">${oeeDelta>=0?'+':''}${oeeDelta}</span>${src}`,
       w:k.avg_oee, col:k.avg_oee>=k.oee_target?'var(--run)':'var(--idle)'},
     {k:'On-Time Delivery',v:`<span class="${k.on_time>=90?'up':'warn'}">${k.on_time}<small>%</small></span>`,
       meta:`${state.jobs.filter(j=>j.late&&j.stage!=='done').length} งานเลยกำหนด`,
       w:k.on_time, col:k.on_time>=90?'var(--run)':'var(--idle)'},
     {k:'Scrap + Rework',v:`${k.scrap}<small>%</small>`,
-      meta:`เป้า &lt; 2.0% · <span class="warn">เฝ้าระวัง</span>`, w:Math.min(100,k.scrap*10), col:'var(--down)'},
+      meta:`เป้า &lt; 2.0%${src}`, w:Math.min(100,k.scrap*10), col:'var(--down)'},
   ];
   cards.forEach(c=>{
     const d=el('div','kpi');
@@ -525,15 +556,22 @@ function renderKpis(){
 }
 function renderMachineGrid(){
   const g=$('#machineGrid');g.innerHTML='';
-  state.machines.forEach(m=>{
+  const byType={};
+  state.machines.forEach(m=>{ (byType[m.type||'—']=byType[m.type||'—']||[]).push(m); });
+  Object.keys(byType).sort().forEach(type=>{
+    const list=byType[type];
+    const avg=Math.round(list.reduce((s,m)=>s+m.oee,0)/list.length);
+    const run=list.filter(m=>m.status==='running').length;
+    const down=list.filter(m=>m.status==='down').length;
     const c=el('div','mcard');
-    c.innerHTML=`<div class="code">${m.code}</div><div class="type">${m.type}</div>${dial(m.oee)}
-      <div class="job">${m.job?`<b>${m.job}</b>`:'<span style="color:var(--tx-faint)">ว่าง</span>'}</div>
-      <div class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</div>`;
+    c.innerHTML=`<div class="code">${type}</div><div class="type">${list.length} เครื่อง</div>${dial(avg)}
+      <div class="job"><b style="color:var(--run)">${run}</b> เดิน${down?` · <b style="color:var(--down)">${down}</b> เสีย`:''}</div>
+      <div class="st ${down>0?'down':'running'}"><span class="dot"></span>OEE เฉลี่ย</div>`;
     g.appendChild(c);
   });
   const run=state.machines.filter(m=>m.status==='running').length;
-  $('#mSummary').textContent=`เดินเครื่อง ${run}/${state.machines.length}`;
+  const down=state.machines.filter(m=>m.status==='down').length;
+  $('#mSummary').textContent=`เดินเครื่อง ${run}/${state.machines.length} · เสีย ${down}`;
 }
 function renderPareto(){
   const box=$('#paretoBox');box.innerHTML='';
@@ -557,7 +595,9 @@ function renderWip(){
 }
 function renderMachineTbl(){
   const tb=$('#machineTbl tbody');tb.innerHTML='';
-  state.machines.forEach(m=>{
+  const q=($('#macFilter')&&$('#macFilter').value||'').trim().toLowerCase();
+  const list=q?state.machines.filter(m=>`${m.code} ${m.line} ${m.type} ${m.model}`.toLowerCase().includes(q)):state.machines;
+  list.forEach(m=>{
     const tr=el('tr','clickable');tr.dataset.code=m.code;tr.title='คลิกเพื่อแก้สถานะ/OEE';
     tr.innerHTML=`<td><div style="font-family:var(--mono);font-weight:600">${m.model||'—'}</div><div style="font-family:var(--mono);font-size:10px;color:var(--tx-faint)">${m.code}</div></td>
       <td style="font-family:var(--mono);color:var(--cool)">${m.line||'—'}</td>
@@ -597,10 +637,23 @@ function renderSkills(){
     tr.innerHTML=cells;tb.appendChild(tr);
   });
 }
+function boardFilter(jobs){
+  const t=($('#fltText')&&$('#fltText').value||'').trim().toLowerCase();
+  const pri=$('#fltPri')&&$('#fltPri').value||'';
+  const lateOnly=$('#fltLate')&&$('#fltLate').checked;
+  return jobs.filter(j=>{
+    if(pri && String(j.priority)!==pri) return false;
+    if(lateOnly && !j.late) return false;
+    if(t){ const hay=`${j.wo} ${j.part} ${j.line} ${j.note}`.toLowerCase(); if(!hay.includes(t)) return false; }
+    return true;
+  });
+}
 function renderBoard(){
   const board=$('#board');board.innerHTML='';
+  const shown=boardFilter(state.jobs);
+  const fc=$('#fltCount'); if(fc) fc.textContent=`แสดง ${shown.length}/${state.jobs.length} งาน`;
   STAGES.forEach(([key,label])=>{
-    const jobs=state.jobs.filter(j=>j.stage===key);
+    const jobs=shown.filter(j=>j.stage===key);
     const col=el('div','col');col.dataset.stage=key;
     col.innerHTML=`<h3>${label}<span class="cnt">${jobs.length}</span></h3>`;
     const stack=el('div','stack');
@@ -648,12 +701,18 @@ async function setStage(id, stage){
     const total=ops.length, cur=rj.op_seq||1;
     if(total>0 && cur<total){
       const nxt=ops.find(o=>o.seq===cur+1)||ops[cur];
+      // auto-assign the next station on the same line (IG401-RW → IG401-BR → …)
+      const line=rj.work_orders?.line||'';
+      const OPCODE={'Raceway':'RW','Bore':'BR','Auto check':'AC','Honing':'HN'};
+      let nextMac=null;
+      if(line){ const oc=OPCODE[nxt.op_name]||(nxt.op_name||'').replace(/\s/g,'').slice(0,2).toUpperCase();
+        const m=RAW.machines.find(x=>x.code===line+'-'+oc); nextMac=m?m.id:null; }
       const patch={op_seq:cur+1, op_name:nxt.op_name, op_machine_type_id:nxt.machine_type_id,
-                   stage:'queued', machine_id:null, operator_id:null};
-      Object.assign(rj,patch); rj.machines=null; rj.employees=null; buildState(); renderAll();  // optimistic
+                   stage:'queued', machine_id:nextMac, operator_id:null};
+      Object.assign(rj,patch); rj.machines=nextMac?{code:line+'-'+(OPCODE[nxt.op_name]||'')}:null; rj.employees=null; buildState(); renderAll();  // optimistic
       const {error}=await sb.from('job_assignments').update(patch).eq('id',id);
       if(error){ console.error(error); await loadFromSupabase(); renderAll(); toast('ผิดพลาด: '+(error.message||error),'err'); }
-      else toast('→ ขั้นถัดไป: '+nxt.op_name,'ok');
+      else toast('→ ขั้นถัดไป: '+nxt.op_name+(nextMac?' @ '+line:''),'ok');
       return;
     }
     // final operation done → complete
@@ -671,6 +730,38 @@ async function setStage(id, stage){
   if(error){ console.error(error); rj.stage=prev; buildState(); renderAll(); }  // rollback
 }
 
+function renderDowntime(){
+  const tb=$('#downtimeTbl tbody'); if(!tb) return; tb.innerHTML='';
+  const logs=state.downtimeLogs||[];
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="5" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึก downtime</td></tr>'; return; }
+  logs.forEach(d=>{
+    const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const tr=el('tr');
+    tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
+      <td style="font-family:var(--mono);font-weight:600">${d.machine}</td>
+      <td>${d.reason}</td>
+      <td style="font-family:var(--mono);color:var(--idle)">${d.minutes} น.</td>
+      <td><button class="addbtn dtdel" data-dt="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+function renderProduction(){
+  const tb=$('#prodTbl tbody'); if(!tb) return; tb.innerHTML='';
+  const logs=state.productionLogs||[];
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="7" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกผลผลิต</td></tr>'; return; }
+  logs.forEach(d=>{
+    const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+    const tr=el('tr');
+    tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
+      <td style="font-family:var(--mono);font-weight:600">${d.machine}</td>
+      <td style="font-family:var(--mono)">${d.shift}</td>
+      <td style="font-family:var(--mono);color:var(--run)">${d.good}</td>
+      <td style="font-family:var(--mono);color:var(--down)">${d.scrap}</td>
+      <td style="font-family:var(--mono);color:var(--tx-dim)">${d.run}/${d.plan}</td>
+      <td><button class="addbtn pddel" data-pd="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
+    tb.appendChild(tr);
+  });
+}
 function renderBottleneck(){
   const box=$('#bnPanel'); if(!box) return;
   const info=state.bottleneckInfo||{}; const cells=state.bottleneck||[];
@@ -690,7 +781,7 @@ function renderBottleneck(){
 }
 function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
-  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();
+  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();renderDowntime();renderProduction();
   if(typeof renderParts==='function') renderParts();
   const emps=(RAW&&RAW.employees)||[];
   const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
@@ -703,7 +794,7 @@ function setConn(){
 }
 
 /* ---------------- Supabase data layer ---------------- */
-let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[]};
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[],reasons:[],production:[]};
 const ACTIVE=['setup','running','inspection'];
 const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
 
@@ -753,6 +844,8 @@ function buildState(){
   const agg={};
   RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+(d.minutes||0);});
   state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
+  state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,machine:d.machines?.code||'—',
+    reason:d.downtime_reasons?.name||'—',minutes:d.minutes||0,when:d.occurred_on})).slice(0,15);
   // People
   const roleLabel=['dept_manager'];
   state.people=RAW.employees.map(e=>{
@@ -775,15 +868,30 @@ function buildState(){
   const spof={};
   cols.forEach(c=>{spof[c]=rows.filter(r=>r.levels[c]>=2).length===1;});
   state.skills={columns:cols,rows,spof};
-  // KPIs
+  // KPIs — ใช้บันทึกผลผลิตจริง (เดือนนี้) ถ้ามี ไม่งั้น fallback ค่าประมาณ
   const oeeAvg=state.machines.length?Math.round(state.machines.reduce((s,m)=>s+m.oee,0)/state.machines.length):0;
   const oeeTgt=state.machines.length?Math.round(state.machines.reduce((s,m)=>s+m.oee_target,0)/state.machines.length):0;
   const target=jobsRaw.reduce((s,j)=>s+(j.planned_qty||0),0);
   const done=jobsRaw.filter(j=>j.stage==='done').reduce((s,j)=>s+j.planned_qty,0);
-  const wip=jobsRaw.filter(j=>['running','inspection'].includes(j.stage)).reduce((s,j)=>s+j.planned_qty,0);
+  const wipQ=jobsRaw.filter(j=>['running','inspection'].includes(j.stage)).reduce((s,j)=>s+j.planned_qty,0);
   const active=state.jobs.filter(j=>j.stage!=='done');
   const onTime=active.length?Math.round(100*active.filter(j=>!j.late).length/active.length):100;
-  state.kpis={output:done+Math.round(wip*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4};
+  const monthStart=new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const mlogs=(RAW.production||[]).filter(p=>new Date(p.occurred_on)>=monthStart);
+  const sumGood=mlogs.reduce((s,p)=>s+(p.good_qty||0),0);
+  const sumScrap=mlogs.reduce((s,p)=>s+(p.scrap_qty||0),0);
+  const sumRun=mlogs.reduce((s,p)=>s+(p.run_min||0),0);
+  const sumPlan=mlogs.reduce((s,p)=>s+(p.planned_min||0),0);
+  if(mlogs.length){
+    const avail=sumPlan?sumRun/sumPlan:0;
+    const quality=(sumGood+sumScrap)?sumGood/(sumGood+sumScrap):0;
+    state.kpis={output:sumGood,target,avg_oee:Math.round(avail*quality*100),oee_target:oeeTgt,
+      on_time:onTime,scrap:+(100*(sumScrap/((sumGood+sumScrap)||1))).toFixed(1),real:true};
+  } else {
+    state.kpis={output:done+Math.round(wipQ*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4,real:false};
+  }
+  state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,machine:p.machines?.code||'—',
+    shift:p.shifts?.name||'—',good:p.good_qty||0,scrap:p.scrap_qty||0,run:p.run_min||0,plan:p.planned_min||0,when:p.occurred_on}));
   // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
   const opOrder={}, opActive={};
   RAW.operations.forEach(o=>{ if(!(o.op_name in opOrder)||o.seq<opOrder[o.op_name]) opOrder[o.op_name]=o.seq; });
@@ -813,16 +921,18 @@ async function loadFromSupabase(){
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
     sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,line,target_day,target_month,note,part_numbers(part_no)),machines(code),employees(full_name)'),
-    sb.from('downtime_logs').select('minutes,downtime_reasons(name),machines(type_id)'),
+    sb.from('downtime_logs').select('id,minutes,occurred_on,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
     sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
+    sb.from('downtime_reasons').select('id,name').order('name'),
+    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,machines(code),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
   ];
-  const [mt,mac,emp,sk,jb,dt,pt,sh,po]=await Promise.all(q);
-  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po].find(r=>r.error);
+  const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl].find(r=>r.error);
   if(err) throw err.error;
   RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,
-       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data};
+       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data,reasons:rs.data,production:pl.data};
   buildState();
 }
 
@@ -1238,10 +1348,90 @@ async function saveRouting(pid,rows){
   }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 
+/* ================= Production logging ================= */
+function openLogProduction(){
+  if(!live()) return;
+  const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
+  const shiftOpts=RAW.shifts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const body=`
+   <div class="field row2"><div><label>เครื่อง</label><div class="combo"><input id="pgMac" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG401-RW"><div class="combo-list" id="pgMacList" hidden></div></div></div>
+     <div><label>กะ</label><select id="pgShift">${shiftOpts}</select></div></div>
+   <div class="field row2"><div><label>ชิ้นดี</label><input id="pgGood" type="number" min="0" value="0"></div>
+     <div><label>ชิ้นเสีย</label><input id="pgScrap" type="number" min="0" value="0"></div></div>
+   <div class="field row2"><div><label>เวลาเดินจริง (นาที)</label><input id="pgRun" type="number" min="0" value="0"></div>
+     <div><label>เวลาที่วางแผน (นาที)</label><input id="pgPlan" type="number" min="0" value="480"></div></div>
+   <div class="field"><label>วันที่/เวลา</label><input id="pgWhen" type="datetime-local"></div>
+   <div class="hint2">OEE = (เดินจริง/แผน) × (ดี/(ดี+เสีย)) · ยิ่งบันทึกครบ ตัวเลขยิ่งแม่น</div>`;
+  openModal('บันทึกผลผลิต',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="pgSave">บันทึก</button>`);
+  setupCombo($('#pgMac'),$('#pgMacList'),machines);
+  const now=new Date(); now.setSeconds(0,0); $('#pgWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  $('#pgSave').onclick=async()=>{
+    const code=$('#pgMac').value.trim(); const mac=RAW.machines.find(m=>m.code===code);
+    if(!mac) return toast('เลือกเครื่อง','err');
+    const good=parseInt($('#pgGood').value,10)||0, scrap=parseInt($('#pgScrap').value,10)||0;
+    const run=parseInt($('#pgRun').value,10)||0, plan=parseInt($('#pgPlan').value,10)||0;
+    if(good+scrap<=0&&run<=0) return toast('กรอกจำนวนหรือเวลาอย่างน้อยหนึ่งอย่าง','err');
+    const dv=$('#pgWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
+    try{ await sbInsert('production_logs',{machine_id:mac.id,shift_id:$('#pgShift').value||null,
+      good_qty:good,scrap_qty:scrap,run_min:run,planned_min:plan,occurred_on});
+      closeModal(); await afterWrite('บันทึกผลผลิตแล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+  };
+}
+async function delProduction(id){
+  try{ await sbDelete('production_logs',id); await afterWrite('ลบบันทึกแล้ว'); }
+  catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
+/* ================= Downtime logging ================= */
+function openLogDowntime(){
+  if(!live()) return;
+  const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
+  const reasons=(RAW.reasons||[]).map(r=>r.name);
+  const body=`
+   <div class="field"><label>เครื่อง</label><div class="combo"><input id="dMac" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG401-RW"><div class="combo-list" id="dMacList" hidden></div></div></div>
+   <div class="field"><label>สาเหตุ</label><div class="combo"><input id="dReason" autocomplete="off" placeholder="เลือก หรือพิมพ์สาเหตุใหม่"><div class="combo-list" id="dReasonList" hidden></div></div></div>
+   <div class="field row2"><div><label>เวลาที่เสีย (นาที)</label><input id="dMin" type="number" min="1" value="30"></div>
+     <div><label>วันที่/เวลา</label><input id="dWhen" type="datetime-local"></div></div>
+   <div class="hint2">พิมพ์สาเหตุใหม่ที่ยังไม่มีได้ ระบบจะเพิ่มให้อัตโนมัติ</div>`;
+  openModal('บันทึก Downtime',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">บันทึก</button>`);
+  setupCombo($('#dMac'),$('#dMacList'),machines);
+  setupCombo($('#dReason'),$('#dReasonList'),reasons);
+  const now=new Date(); now.setSeconds(0,0); $('#dWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  $('#dSave').onclick=async()=>{
+    const code=$('#dMac').value.trim(), reasonName=$('#dReason').value.trim(), min=parseInt($('#dMin').value,10)||0;
+    if(!code) return toast('เลือกเครื่อง','err');
+    if(!reasonName) return toast('กรอกสาเหตุ','err');
+    if(min<=0) return toast('กรอกจำนวนนาที','err');
+    const mac=RAW.machines.find(m=>m.code===code);
+    if(!mac) return toast('ไม่พบเครื่อง '+code,'err');
+    try{
+      let reason=(RAW.reasons||[]).find(r=>r.name===reasonName);
+      let reasonId=reason?reason.id:null;
+      if(!reasonId){ const r=await sbInsert('downtime_reasons',{name:reasonName},true); reasonId=r.id; }
+      const dv=$('#dWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
+      await sbInsert('downtime_logs',{machine_id:mac.id,reason_id:reasonId,minutes:min,occurred_on});
+      closeModal(); await afterWrite('บันทึก downtime แล้ว');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+  };
+}
+async function delDowntime(id){
+  try{ await sbDelete('downtime_logs',id); await afterWrite('ลบบันทึกแล้ว'); }
+  catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+
 /* ---- wiring ---- */
 function wireFeatures(){
   $('#btnNewWO')?.addEventListener('click',openNewWO);
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
+  $('#btnLogDt')?.addEventListener('click',openLogDowntime);
+  $('#btnLogProd')?.addEventListener('click',openLogProduction);
+  $('#prodTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.pddel'); if(b&&confirm('ลบบันทึกผลผลิตนี้?')) delProduction(b.dataset.pd); });
+  $('#downtimeTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.dtdel'); if(b&&confirm('ลบบันทึก downtime นี้?')) delDowntime(b.dataset.dt); });
+  $('#fltText')?.addEventListener('input',()=>renderBoard());
+  $('#fltPri')?.addEventListener('change',()=>renderBoard());
+  $('#fltLate')?.addEventListener('change',()=>renderBoard());
+  $('#macFilter')?.addEventListener('input',()=>renderMachineTbl());
   $('#btnAddEmp')?.addEventListener('click',openAddEmp);
   $('#peopleTbl')?.addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.emp) openEditEmp(tr.dataset.emp); });
   $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
