@@ -407,7 +407,7 @@
       <div class="panel">
         <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
-          <thead><tr><th>สาย (Line)</th><th>Model กำลังผลิต</th><th>สถานะ</th><th>OEE เฉลี่ย</th><th>เครื่องในสาย</th></tr></thead>
+          <thead><tr><th>Line</th><th>Model กำลังผลิต</th><th>สถานะ</th><th>OEE เฉลี่ย</th><th>เครื่องจักรใน Line</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -637,7 +637,7 @@ function renderMachineTbl(){
       return `<span style="font-family:var(--mono);font-size:10.5px;color:${c};border:1px solid ${c};border-radius:4px;padding:2px 6px;margin-right:4px;white-space:nowrap">${m.type}</span>`;
     }).join('');
     const models=l.models.length?l.models.join(' · '):'<span style="color:var(--tx-faint)">— ว่าง</span>';
-    const tr=el('tr','clickable');tr.dataset.line=l.line;tr.title='คลิกเพื่อดู/แก้เครื่องในสาย';
+    const tr=el('tr','clickable');tr.dataset.line=l.line;tr.title='คลิกเพื่อดู/แก้เครื่องจักรใน Line';
     tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${l.line}</td>
       <td style="font-family:var(--mono)">${models}</td>
       <td><span style="color:${s[1]};font-family:var(--mono);font-size:12px"><span class="dot" style="background:${s[1]};display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>${s[0]}${l.down?` (${l.down})`:''}</span></td>
@@ -645,7 +645,7 @@ function renderMachineTbl(){
       <td>${chips}</td>`;
     tb.appendChild(tr);
   });
-  if(!list.length) tb.innerHTML='<tr><td colspan="5" style="color:var(--tx-faint);padding:14px">ไม่พบสาย</td></tr>';
+  if(!list.length) tb.innerHTML='<tr><td colspan="5" style="color:var(--tx-faint);padding:14px">ไม่พบ Line</td></tr>';
 }
 function renderPeople(){
   const tb=$('#peopleTbl tbody');tb.innerHTML='';
@@ -1163,7 +1163,7 @@ function openNewWO(){
    <div class="field row2"><div><label>ความสำคัญ</label><select id="fPri"><option value="1">P1 สูงสุด</option><option value="2" selected>P2</option><option value="3">P3</option></select></div>
      <div><label>ครบกำหนด</label><input id="fDue" type="date"></div></div>
    <div class="field"><label>หมายเหตุ / กำกับงาน</label><input id="fNote" type="text" placeholder="เช่น งานเร่ง · ลูกค้า NSK · ล็อตพิเศษ"></div>
-   <div class="hint2">Line ขึ้นต้น IG = วงใน (-IR) · OG = วงนอก (-OR) — ระบบจับคู่ part และจ่ายเข้าสถานีต้นสายให้อัตโนมัติ</div>`;
+   <div class="hint2">Line ขึ้นต้น IG = วงใน (-IR) · OG = วงนอก (-OR) — ระบบจับคู่ part และจ่ายเข้าเครื่องต้น Line ให้อัตโนมัติ</div>`;
   openModal('เพิ่มงานตามแผน · Production Plan',body,
     `<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="fSave">สร้างงาน</button>`);
   setupCombo($('#fModel'),$('#fModelList'),models);
@@ -1273,7 +1273,7 @@ function openAddMachine(){
   const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const body=`
    <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="mModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="mModelList" hidden></div></div></div>
-     <div><label>สาย (Line)</label><div class="combo"><input id="mLine" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG40"><div class="combo-list" id="mLineList" hidden></div></div></div></div>
+     <div><label>Line</label><div class="combo"><input id="mLine" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG40"><div class="combo-list" id="mLineList" hidden></div></div></div></div>
    <div class="field"><label>เครื่องจักร</label><select id="mType">${typeOpts}</select></div>
    <div class="field row2"><div><label>สถานะ</label><select id="mStatus">${stOpts}</select></div>
      <div><label>OEE %</label><input id="mOee" type="number" min="0" max="100" value="0"></div></div>
@@ -1301,9 +1301,9 @@ function openLineDetail(line){
       <select class="lsStatus" style="flex:none;width:120px">${stOpts(m.status)}</select>
       <input class="lsOee" type="number" min="0" max="100" value="${m.oee}" style="width:66px" title="OEE %">
     </div>`).join('');
-  const body=`<div class="hint2" style="margin-bottom:12px">สาย <b style="color:var(--cool)">${line}</b> · Model กำลังผลิต: ${L.models.join(', ')||'— ว่าง'}</div>${rows}
-    <div class="hint2" style="margin-top:10px">ปรับสถานะ/OEE ของแต่ละเครื่องในสายนี้ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
-  openModal('เครื่องในสาย · '+line,body,`<button class="btn ghost" onclick="closeModal()">ปิด</button><button class="btn primary" id="lsSave">บันทึก</button>`);
+  const body=`<div class="hint2" style="margin-bottom:12px">Line <b style="color:var(--cool)">${line}</b> · Model กำลังผลิต: ${L.models.join(', ')||'— ว่าง'}</div>${rows}
+    <div class="hint2" style="margin-top:10px">ปรับสถานะ/OEE ของแต่ละเครื่องจักรใน Line นี้ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
+  openModal('เครื่องจักรใน Line · '+line,body,`<button class="btn ghost" onclick="closeModal()">ปิด</button><button class="btn primary" id="lsSave">บันทึก</button>`);
   $('#lsSave').onclick=async()=>{
     try{
       const updates=[];
@@ -1325,7 +1325,7 @@ function openEditMachine(code){
   const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const body=`
    <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="eModel" autocomplete="off" value="${m.model||''}"><div class="combo-list" id="eModelList" hidden></div></div></div>
-     <div><label>สาย (Line)</label><div class="combo"><input id="eLine" autocomplete="off" value="${m.line||''}"><div class="combo-list" id="eLineList" hidden></div></div></div></div>
+     <div><label>Line</label><div class="combo"><input id="eLine" autocomplete="off" value="${m.line||''}"><div class="combo-list" id="eLineList" hidden></div></div></div></div>
    <div class="field row2"><div><label>เครื่องจักร</label><select id="eType">${typeOpts}</select></div>
      <div><label>สถานะ</label><select id="eStatus">${stOpts}</select></div></div>
    <div class="field row2"><div><label>OEE %</label><input id="eOee" type="number" min="0" max="100" value="${m.oee}"></div>
