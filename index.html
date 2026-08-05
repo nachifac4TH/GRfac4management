@@ -396,7 +396,7 @@
       <div class="panel">
         <h2>บันทึกปัญหา / หยุดเดินเครื่อง <span class="tag">คิดเป็น Downtime</span><button class="addbtn" id="btnLogProblem" style="margin-left:auto">+ บันทึกปัญหา</button></h2>
         <table class="tbl" id="downtimeTbl">
-          <thead><tr><th>เริ่ม</th><th>Model</th><th>เครื่อง</th><th>สาเหตุ</th><th>สถานะ / เวลา</th><th></th></tr></thead>
+          <thead><tr><th>เริ่ม</th><th>Model</th><th>Line</th><th>เครื่องจักร</th><th>สาเหตุ</th><th>สถานะ / เวลา</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="hint">ปัญหาที่บันทึกจะรวมเข้ากราฟ Pareto (Control Room) และการวิเคราะห์คอขวด "ซ่อมบ่อย" อัตโนมัติ · เครื่องจักรไม่บังคับ (เช่นตอน Changeover)</div>
@@ -407,14 +407,14 @@
       <div class="panel">
         <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
-          <thead><tr><th>Model</th><th>สาย (Line)</th><th>สถานะ</th><th>OEE</th><th>งานปัจจุบัน</th><th>ผู้รับผิดชอบ</th></tr></thead>
+          <thead><tr><th>สาย (Line)</th><th>Model กำลังผลิต</th><th>สถานะ</th><th>OEE เฉลี่ย</th><th>เครื่องในสาย</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
       <div class="panel" style="margin-top:16px">
         <h2>ผลผลิตล่าสุด <span class="tag">ดี/เสีย · เวลาเดิน → OEE จริง</span></h2>
         <table class="tbl" id="prodTbl">
-          <thead><tr><th>เวลา</th><th>เครื่อง</th><th>กะ</th><th>ดี</th><th>เสีย</th><th>เดิน/แผน (น.)</th><th></th></tr></thead>
+          <thead><tr><th>เวลา</th><th>Line</th><th>กะ</th><th>ดี</th><th>เสีย</th><th>เดิน/แผน (น.)</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="hint">พอมีบันทึกผลผลิต ระบบจะใช้คำนวณ OEE / Output / Scrap จริง (แทนค่าประมาณ) บน Control Room</div>
@@ -473,7 +473,7 @@
       <div class="panel" style="margin-top:16px">
         <h2>ผลตรวจล่าสุด <span class="tag" id="qcRecentTag">roundness / Ra / เสียง</span></h2>
         <table class="tbl" id="qcTbl">
-          <thead><tr><th>เวลา</th><th>รุ่น</th><th>Lot</th><th>เครื่อง</th><th>ขั้น</th><th>กลม</th><th>Ra</th><th>เสียง</th><th>ผล</th><th></th></tr></thead>
+          <thead><tr><th>เวลา</th><th>รุ่น</th><th>Lot</th><th>Line</th><th>ขั้น</th><th>กลม</th><th>Ra</th><th>เสียง</th><th>ผล</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -627,17 +627,25 @@ function renderWip(){
 function renderMachineTbl(){
   const tb=$('#machineTbl tbody');tb.innerHTML='';
   const q=($('#macFilter')&&$('#macFilter').value||'').trim().toLowerCase();
-  const list=q?state.machines.filter(m=>`${m.code} ${m.line} ${m.type} ${m.model}`.toLowerCase().includes(q)):state.machines;
-  list.forEach(m=>{
-    const tr=el('tr','clickable');tr.dataset.code=m.code;tr.title='คลิกเพื่อแก้สถานะ/OEE';
-    tr.innerHTML=`<td><div style="font-family:var(--mono);font-weight:600">${m.model||'—'}</div><div style="font-family:var(--mono);font-size:10px;color:var(--tx-faint)">${m.code}</div></td>
-      <td style="font-family:var(--mono);color:var(--cool)">${m.line||'—'}</td>
-      <td><span class="st ${m.status}"><span class="dot"></span>${STLABEL[m.status]}</span></td>
-      <td style="font-family:var(--mono);color:${oeeColor(m.oee)};font-weight:600">${m.oee}%</td>
-      <td>${m.job?`<b style="font-family:var(--mono)">${m.job}</b>`:'<span style="color:var(--tx-faint)">—</span>'}</td>
-      <td style="color:var(--tx-dim)">${m.operator}</td>`;
+  const lines=state.lines||[];
+  const list=q?lines.filter(l=>`${l.line} ${l.models.join(' ')}`.toLowerCase().includes(q)):lines;
+  const ST={running:['ปกติ','var(--run)'],idle:['มีเครื่องว่าง','var(--idle)'],down:['มีเครื่องเสีย','var(--down)']};
+  list.forEach(l=>{
+    const s=ST[l.status]||['—','var(--tx-dim)'];
+    const chips=l.stations.map(m=>{
+      const c=m.status==='down'?'var(--down)':(m.status==='idle'?'var(--idle)':'var(--run)');
+      return `<span style="font-family:var(--mono);font-size:10.5px;color:${c};border:1px solid ${c};border-radius:4px;padding:2px 6px;margin-right:4px;white-space:nowrap">${m.type}</span>`;
+    }).join('');
+    const models=l.models.length?l.models.join(' · '):'<span style="color:var(--tx-faint)">— ว่าง</span>';
+    const tr=el('tr','clickable');tr.dataset.line=l.line;tr.title='คลิกเพื่อดู/แก้เครื่องในสาย';
+    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${l.line}</td>
+      <td style="font-family:var(--mono)">${models}</td>
+      <td><span style="color:${s[1]};font-family:var(--mono);font-size:12px"><span class="dot" style="background:${s[1]};display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>${s[0]}${l.down?` (${l.down})`:''}</span></td>
+      <td style="font-family:var(--mono);color:${oeeColor(l.oee)};font-weight:600">${l.oee}%</td>
+      <td>${chips}</td>`;
     tb.appendChild(tr);
   });
+  if(!list.length) tb.innerHTML='<tr><td colspan="5" style="color:var(--tx-faint);padding:14px">ไม่พบสาย</td></tr>';
 }
 function renderPeople(){
   const tb=$('#peopleTbl tbody');tb.innerHTML='';
@@ -695,7 +703,7 @@ function renderBoard(){
         ${j.opTotal?`<div class="op">ขั้น ${j.opSeq}/${j.opTotal} · ${j.opName}</div>`:''}
         ${j.note?`<div class="note">${j.note}</div>`:''}
         <div class="row"><span>ครบกำหนด</span><span class="due ${j.late?'late':''}">${j.due}</span></div>
-        <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.machine}</div></div>
+        <div class="who"><div class="av">${initials(j.operator)}</div><div class="nm">${j.operator}</div><div class="mc">${j.line||'—'}</div></div>
         <div class="mv"><button ${i===0?'disabled':''} data-mv="-1">◀</button>
           <button class="asg" data-asg="${j.id}">จ่าย</button>
           <button ${i===STAGES.length-1?'disabled':''} data-mv="1">▶</button></div>`;
@@ -763,7 +771,7 @@ async function setStage(id, stage){
 function renderDowntime(){
   const tb=$('#downtimeTbl tbody'); if(!tb) return; tb.innerHTML='';
   const logs=state.downtimeLogs||[];
-  if(!logs.length){ tb.innerHTML='<tr><td colspan="6" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกปัญหา</td></tr>'; return; }
+  if(!logs.length){ tb.innerHTML='<tr><td colspan="7" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกปัญหา</td></tr>'; return; }
   logs.forEach(d=>{
     const when=d.started?new Date(d.started).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
     const open=!d.ended;
@@ -777,7 +785,8 @@ function renderDowntime(){
     const tr=el('tr');
     tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
       <td style="font-family:var(--mono);font-weight:600">${d.model}</td>
-      <td style="font-family:var(--mono)">${d.machine}</td>
+      <td style="font-family:var(--mono);color:var(--cool)">${d.line}</td>
+      <td style="color:var(--tx-dim)">${d.machineType}</td>
       <td>${d.reason}</td>
       <td>${stCell}</td>
       <td>${actCell}</td>`;
@@ -801,7 +810,7 @@ function renderQcRecent(){
     tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
       <td style="font-family:var(--mono);font-weight:600">${q.part}</td>
       <td style="font-family:var(--mono);color:var(--cool)">${q.lot}</td>
-      <td style="font-family:var(--mono)">${q.machine}</td>
+      <td style="font-family:var(--mono)">${q.line}</td>
       <td style="font-size:12px">${q.op}</td>
       <td style="font-family:var(--mono)">${q.roundness??'—'}</td>
       <td style="font-family:var(--mono)">${q.ra??'—'}</td>
@@ -839,7 +848,7 @@ function renderProduction(){
     const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
     const tr=el('tr');
     tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
-      <td style="font-family:var(--mono);font-weight:600">${d.machine}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${d.line}</td>
       <td style="font-family:var(--mono)">${d.shift}</td>
       <td style="font-family:var(--mono);color:var(--run)">${d.good}</td>
       <td style="font-family:var(--mono);color:var(--down)">${d.scrap}</td>
@@ -916,6 +925,19 @@ function buildState(){
       job:cur?.work_orders?.part_numbers?.part_no||null,
       operator:cur?first(cur.employees?.full_name):'—'};
   }).sort((a,b)=>(a.line||'').localeCompare(b.line||'')||a.code.localeCompare(b.code));
+  // Lines — สรุประดับสาย: สถานะ + Model ที่กำลังผลิต
+  const OPORD={'Raceway':1,'Bore':2,'Auto check':3,'Honing':4};
+  const lineMap={}; state.machines.forEach(m=>{ if(m.line){(lineMap[m.line]=lineMap[m.line]||[]).push(m);} });
+  const lineModels={};
+  jobsRaw.forEach(j=>{ const ln=j.work_orders?.line, pn=j.work_orders?.part_numbers?.part_no;
+    if(ln&&pn&&j.stage!=='done'){ (lineModels[ln]=lineModels[ln]||new Set()).add(pn); } });
+  state.lines=Object.keys(lineMap).sort().map(line=>{
+    const st=lineMap[line].slice().sort((a,b)=>(OPORD[a.type]||9)-(OPORD[b.type]||9));
+    const down=st.filter(m=>m.status==='down').length, idle=st.filter(m=>m.status==='idle').length;
+    return {line,stations:st,models:[...(lineModels[line]||[])],down,idle,
+      oee:Math.round(st.reduce((s,m)=>s+m.oee,0)/st.length),
+      status:down>0?'down':(idle>0?'idle':'running')};
+  });
   // jobs (dispatch board) — with routing/operation position
   const opCount={};  // part_number_id -> total ops
   RAW.operations.forEach(o=>{opCount[o.part_number_id]=(opCount[o.part_number_id]||0)+1;});
@@ -938,7 +960,7 @@ function buildState(){
   const agg={};
   RAW.downtime.forEach(d=>{const n=d.downtime_reasons?.name||'อื่นๆ';agg[n]=(agg[n]||0)+effMin(d);});
   state.pareto=Object.entries(agg).map(([name,minutes])=>({name,minutes})).sort((a,b)=>b.minutes-a.minutes);
-  state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,machine:d.machines?.code||'—',model:d.model||'—',
+  state.downtimeLogs=RAW.downtime.map(d=>({id:d.id,line:d.machines?.line||'—',machineType:d.machines?.machine_types?.name||'—',model:d.model||'—',
     reason:d.downtime_reasons?.name||'—',minutes:d.minutes||0,started:d.occurred_on,ended:d.ended_at||null})).slice(0,20);
   // People
   const roleLabel=['dept_manager'];
@@ -984,7 +1006,7 @@ function buildState(){
   } else {
     state.kpis={output:done+Math.round(wipQ*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4,real:false};
   }
-  state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,machine:p.machines?.code||'—',
+  state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,line:p.machines?.line||'—',machineType:p.machines?.machine_types?.name||'',
     shift:p.shifts?.name||'—',good:p.good_qty||0,scrap:p.scrap_qty||0,run:p.run_min||0,plan:p.planned_min||0,when:p.occurred_on}));
   // Quality / SPC
   const qc=RAW.quality||[];
@@ -1001,7 +1023,7 @@ function buildState(){
       cpkRa:cpkUpper(list.map(q=>q.ra).filter(v=>v!=null),pi.ra)};
   }).filter(x=>x.cpkRnd!=null||x.cpkRa!=null).sort((a,b)=>a.part.localeCompare(b.part));
   state.qcRecent=qc.slice(0,20).map(q=>({id:q.id,when:q.occurred_on,part:q.part_numbers?.part_no||'—',
-    lot:q.lot_no||'—',machine:q.machines?.code||'—',op:q.op_name||'—',roundness:q.roundness,ra:q.ra,
+    lot:q.lot_no||'—',line:q.machines?.line||'—',op:q.op_name||'—',roundness:q.roundness,ra:q.ra,
     anderon:q.anderon,result:q.result,defect:q.defect}));
   // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
   const opOrder={}, opActive={};
@@ -1032,13 +1054,13 @@ async function loadFromSupabase(){
     sb.from('employees').select('id,code,full_name,role,shift_id,shifts(name)').order('code'),
     sb.from('skill_matrix').select('level,employee_id,machine_type_id,employees(full_name,role),machine_types(name)'),
     sb.from('job_assignments').select('id,stage,planned_qty,machine_id,operator_id,work_order_id,op_seq,op_name,op_machine_type_id,work_orders(id,wo_number,priority,due_at,part_number_id,line,target_day,target_month,note,part_numbers(part_no)),machines(code),employees(full_name)'),
-    sb.from('downtime_logs').select('id,minutes,occurred_on,ended_at,model,downtime_reasons(name),machines(code,type_id)').order('occurred_on',{ascending:false}),
+    sb.from('downtime_logs').select('id,minutes,occurred_on,ended_at,model,downtime_reasons(name),machines(code,line,type_id,machine_types(name))').order('occurred_on',{ascending:false}),
     sb.from('part_numbers').select('id,part_no,description,compatible_type_id,bearing_type,component,bore_d,outer_d,width_b,precision_class,target_roundness,target_ra').order('part_no'),
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
     sb.from('downtime_reasons').select('id,name').order('name'),
-    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,machines(code),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
-    sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code)').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code,line,machine_types(name))').order('occurred_on',{ascending:false}).limit(500),
   ];
   const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc]=await Promise.all(q);
   const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc].find(r=>r.error);
@@ -1185,21 +1207,24 @@ async function submitNewWO(){
 function openAssign(id){
   if(!live()) return; refreshTypeMaps();
   const rj=RAW.jobs.find(j=>j.id===id); if(!rj) return;
-  const curType=rj.machine_id?(RAW.machines.find(m=>m.id===rj.machine_id)||{}).type_id:'';
+  const opType=rj.op_machine_type_id||''; const opName=rj.op_name||'';
+  const curLine=rj.work_orders?.line||'';
   const body=`
-   <div class="field"><label>เครื่อง</label><select id="aMac">${machineOptions(rj.machine_id)}</select></div>
-   <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="aOp">${operatorOptions(curType||null,rj.operator_id)}</select>
-     <div class="hint2">ช่างที่มี skill ≥2 สำหรับเครื่องนี้ = แนะนำ (✓)</div></div>
+   <div class="field row2"><div><label>Line</label><div class="combo"><input id="aLine" autocomplete="off" value="${curLine}" placeholder="เช่น IG401"><div class="combo-list" id="aLineList" hidden></div></div></div>
+     <div><label>เครื่องจักร (ตามขั้นตอน)</label><input value="${opName||'—'}" disabled></div></div>
+   <div class="field"><label>ช่างผู้รับผิดชอบ</label><select id="aOp">${operatorOptions(opType||null,rj.operator_id)}</select>
+     <div class="hint2">ช่างที่มี skill ≥2 สำหรับ ${opName||'งานนี้'} = แนะนำ (✓)</div></div>
    <div class="field"><label>สถานะงาน</label><select id="aStage">${STAGES.map(s=>`<option value="${s[0]}" ${s[0]===rj.stage?'selected':''}>${s[1]}</option>`).join('')}</select></div>
    <div class="field"><label>หมายเหตุ / กำกับงาน</label><input id="aNote" type="text" value="${(rj.work_orders?.note||'').replace(/"/g,'&quot;')}" placeholder="เช่น งานเร่ง · รอวัตถุดิบ · ล็อตพิเศษ"></div>`;
   openModal('จ่ายงาน · '+(rj.work_orders?.wo_number||''),body,
     `<button class="btn danger" id="aDel">ลบงาน</button><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="aSave">บันทึก</button>`);
-  $('#aMac').onchange=()=>{ const opt=$('#aMac').selectedOptions[0]; const tid=opt?opt.dataset.type:'';
-    $('#aOp').innerHTML=operatorOptions(tid||null,$('#aOp').value||null); };
+  setupCombo($('#aLine'),$('#aLineList'),allLines());
   $('#aSave').onclick=async()=>{ try{
-      await sbUpdate('job_assignments',id,{machine_id:$('#aMac').value||null,operator_id:$('#aOp').value||null,stage:$('#aStage').value});
+      const line=$('#aLine').value.trim();
+      const patch={machine_id:stationId(line,opName),operator_id:$('#aOp').value||null,stage:$('#aStage').value};
+      await sbUpdate('job_assignments',id,patch);
       const woId=rj.work_order_id||rj.work_orders?.id||null;
-      if(woId) await sbUpdate('work_orders',woId,{note:$('#aNote').value.trim()||null});
+      if(woId) await sbUpdate('work_orders',woId,{note:$('#aNote').value.trim()||null,line:line||null});
       closeModal(); await afterWrite('อัปเดตงานแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
   $('#aDel').onclick=async()=>{ if(!confirm('ลบงานนี้? (ลบทั้ง work order และการจ่ายงาน)')) return; try{
@@ -1265,6 +1290,32 @@ function openAddMachine(){
     try{ await sbInsert('machines',{code,line:line||null,model:$('#mModel').value.trim()||null,type_id:typeId,status:$('#mStatus').value,oee:parseInt($('#mOee').value,10)||0});
       closeModal(); await afterWrite('เพิ่มเครื่อง '+code);
     }catch(e){ toast(String(e.message||e).includes('duplicate')?'สถานีนี้มีอยู่แล้ว ('+code+')':'ผิดพลาด: '+(e.message||e),'err'); } };
+}
+function openLineDetail(line){
+  if(!live()) return;
+  const L=(state.lines||[]).find(x=>x.line===line); if(!L) return;
+  const stOpts=(sel)=>Object.keys(STL).map(s=>`<option value="${s}" ${s===sel?'selected':''}>${STL[s]}</option>`).join('');
+  const rows=L.stations.map(m=>`
+    <div class="oprow" data-code="${m.code}">
+      <span style="flex:1;font-family:var(--mono);font-size:12px;color:var(--tx)">${m.type}</span>
+      <select class="lsStatus" style="flex:none;width:120px">${stOpts(m.status)}</select>
+      <input class="lsOee" type="number" min="0" max="100" value="${m.oee}" style="width:66px" title="OEE %">
+    </div>`).join('');
+  const body=`<div class="hint2" style="margin-bottom:12px">สาย <b style="color:var(--cool)">${line}</b> · Model กำลังผลิต: ${L.models.join(', ')||'— ว่าง'}</div>${rows}
+    <div class="hint2" style="margin-top:10px">ปรับสถานะ/OEE ของแต่ละเครื่องในสายนี้ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
+  openModal('เครื่องในสาย · '+line,body,`<button class="btn ghost" onclick="closeModal()">ปิด</button><button class="btn primary" id="lsSave">บันทึก</button>`);
+  $('#lsSave').onclick=async()=>{
+    try{
+      const updates=[];
+      $('#modal').querySelectorAll('.oprow').forEach(r=>{
+        const m=RAW.machines.find(x=>x.code===r.dataset.code); if(!m) return;
+        const status=r.querySelector('.lsStatus').value, oee=parseInt(r.querySelector('.lsOee').value,10)||0;
+        if(status!==m.status||oee!==m.oee) updates.push({id:m.id,status,oee});
+      });
+      for(const u of updates) await sbUpdate('machines',u.id,{status:u.status,oee:u.oee});
+      closeModal(); await afterWrite(updates.length?('อัปเดต '+updates.length+' เครื่อง'):'ไม่มีการเปลี่ยนแปลง');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+  };
 }
 function openEditMachine(code){
   if(!live()) return; const m=RAW.machines.find(x=>x.code===code); if(!m) return;
@@ -1473,8 +1524,8 @@ function openLogQuality(){
   const body=`
    <div class="field row2"><div><label>รุ่น (part)</label><div class="combo"><input id="qPart" autocomplete="off" placeholder="เช่น 6205-IR"><div class="combo-list" id="qPartList" hidden></div></div></div>
      <div><label>Lot / Batch</label><input id="qLot" placeholder="เช่น L2608-01"></div></div>
-   <div class="field row2"><div><label>เครื่อง</label><div class="combo"><input id="qMac" autocomplete="off" placeholder="เช่น IG401-RW"><div class="combo-list" id="qMacList" hidden></div></div></div>
-     <div><label>ขั้นตอน</label><select id="qOp">${opOpts}</select></div></div>
+   <div class="field row2"><div><label>Line</label><div class="combo"><input id="qMac" autocomplete="off" placeholder="เช่น IG401"><div class="combo-list" id="qMacList" hidden></div></div></div>
+     <div><label>เครื่องจักร / ขั้นตอน</label><select id="qOp">${opOpts}</select></div></div>
    <div class="field"><label>ค่าที่วัด</label>
      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
        <input id="qRnd" type="number" step="0.001" placeholder="กลม µm">
@@ -1485,7 +1536,7 @@ function openLogQuality(){
      <div><label>สาเหตุของเสีย</label><input id="qDef" placeholder="เช่น รางไม่กลม · ผิวไม่ผ่าน · grind burn"></div></div>`;
   openModal('บันทึกผลตรวจคุณภาพ',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="qSave">บันทึก</button>`);
   setupCombo($('#qPart'),$('#qPartList'),parts);
-  setupCombo($('#qMac'),$('#qMacList'),machines);
+  setupCombo($('#qMac'),$('#qMacList'),allLines());
   const chkAuto=()=>{
     const p=RAW.parts.find(x=>x.part_no===$('#qPart').value.trim());
     if(p) $('#qTgtHint').textContent=`เป้า: กลม ≤ ${p.target_roundness??'—'} µm · Ra ≤ ${p.target_ra??'—'} µm`;
@@ -1495,11 +1546,10 @@ function openLogQuality(){
   $('#qPart').addEventListener('input',chkAuto); $('#qRnd').addEventListener('input',chkAuto); $('#qRa').addEventListener('input',chkAuto);
   $('#qSave').onclick=async()=>{
     const p=RAW.parts.find(x=>x.part_no===$('#qPart').value.trim());
-    const mac=RAW.machines.find(x=>x.code===$('#qMac').value.trim());
     const num=id=>{ const v=$(id).value.trim(); return v===''?null:parseFloat(v); };
-    const res=$('#qRes').value;
-    try{ await sbInsert('quality_checks',{part_number_id:p?p.id:null,machine_id:mac?mac.id:null,
-      lot_no:$('#qLot').value.trim()||null,op_name:$('#qOp').value||null,
+    const res=$('#qRes').value; const op=$('#qOp').value;
+    try{ await sbInsert('quality_checks',{part_number_id:p?p.id:null,machine_id:stationId($('#qMac').value.trim(),op),
+      lot_no:$('#qLot').value.trim()||null,op_name:op||null,
       roundness:num('#qRnd'),ra:num('#qRa'),anderon:num('#qAnd'),
       result:res,defect:res==='pass'?null:($('#qDef').value.trim()||null)});
       closeModal(); await afterWrite('บันทึกผลตรวจแล้ว');
@@ -1514,28 +1564,30 @@ async function delQuality(id){
 /* ================= Production logging ================= */
 function openLogProduction(){
   if(!live()) return;
-  const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
   const shiftOpts=RAW.shifts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   const body=`
-   <div class="field row2"><div><label>เครื่อง</label><div class="combo"><input id="pgMac" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG401-RW"><div class="combo-list" id="pgMacList" hidden></div></div></div>
-     <div><label>กะ</label><select id="pgShift">${shiftOpts}</select></div></div>
+   <div class="field row2"><div><label>Line</label><div class="combo"><input id="pgLine" autocomplete="off" placeholder="เช่น IG401"><div class="combo-list" id="pgLineList" hidden></div></div></div>
+     <div><label>เครื่องจักร</label><select id="pgType">${typeSelectOpts('',false)}</select></div></div>
+   <div class="field row2"><div><label>กะ</label><select id="pgShift">${shiftOpts}</select></div>
+     <div><label>วันที่/เวลา</label><input id="pgWhen" type="datetime-local"></div></div>
    <div class="field row2"><div><label>ชิ้นดี</label><input id="pgGood" type="number" min="0" value="0"></div>
      <div><label>ชิ้นเสีย</label><input id="pgScrap" type="number" min="0" value="0"></div></div>
    <div class="field row2"><div><label>เวลาเดินจริง (นาที)</label><input id="pgRun" type="number" min="0" value="0"></div>
      <div><label>เวลาที่วางแผน (นาที)</label><input id="pgPlan" type="number" min="0" value="480"></div></div>
-   <div class="field"><label>วันที่/เวลา</label><input id="pgWhen" type="datetime-local"></div>
-   <div class="hint2">OEE = (เดินจริง/แผน) × (ดี/(ดี+เสีย)) · ยิ่งบันทึกครบ ตัวเลขยิ่งแม่น</div>`;
+   <div class="hint2">OEE = (เดินจริง/แผน) × (ดี/(ดี+เสีย)) · Line + เครื่องจักร ระบุสถานีที่ผลิต</div>`;
   openModal('บันทึกผลผลิต',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="pgSave">บันทึก</button>`);
-  setupCombo($('#pgMac'),$('#pgMacList'),machines);
+  setupCombo($('#pgLine'),$('#pgLineList'),allLines());
   const now=new Date(); now.setSeconds(0,0); $('#pgWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#pgSave').onclick=async()=>{
-    const code=$('#pgMac').value.trim(); const mac=RAW.machines.find(m=>m.code===code);
-    if(!mac) return toast('เลือกเครื่อง','err');
+    const line=$('#pgLine').value.trim(), typeName=$('#pgType').value;
+    if(!line) return toast('เลือก Line','err');
+    const mid=stationId(line,typeName);
+    if(!mid) return toast('ไม่พบสถานี '+line+'-'+opCodeOf(typeName),'err');
     const good=parseInt($('#pgGood').value,10)||0, scrap=parseInt($('#pgScrap').value,10)||0;
     const run=parseInt($('#pgRun').value,10)||0, plan=parseInt($('#pgPlan').value,10)||0;
     if(good+scrap<=0&&run<=0) return toast('กรอกจำนวนหรือเวลาอย่างน้อยหนึ่งอย่าง','err');
     const dv=$('#pgWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
-    try{ await sbInsert('production_logs',{machine_id:mac.id,shift_id:$('#pgShift').value||null,
+    try{ await sbInsert('production_logs',{machine_id:mid,shift_id:$('#pgShift').value||null,
       good_qty:good,scrap_qty:scrap,run_min:run,planned_min:plan,occurred_on});
       closeModal(); await afterWrite('บันทึกผลผลิตแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
@@ -1547,35 +1599,39 @@ async function delProduction(id){
 }
 
 /* ================= Downtime logging ================= */
+/* ---- Line + เครื่องจักร(ประเภทงาน) → resolve เป็นสถานีข้างหลัง ---- */
+const MTYPE_CODE={'Raceway':'RW','Bore':'BR','Auto check':'AC','Honing':'HN'};
+function opCodeOf(n){ return MTYPE_CODE[n]||(n||'').replace(/\s/g,'').slice(0,2).toUpperCase(); }
+function allLines(){ return [...new Set(RAW.machines.map(m=>m.line).filter(Boolean))].sort(); }
+function stationId(line,typeName){ if(!line||!typeName) return null; const m=RAW.machines.find(x=>x.code===line+'-'+opCodeOf(typeName)); return m?m.id:null; }
+function typeSelectOpts(sel,withBlank){ return (withBlank?'<option value="">— ไม่ระบุ —</option>':'')+RAW.machineTypes.map(t=>`<option value="${t.name}" ${t.name===sel?'selected':''}>${t.name}</option>`).join(''); }
+
 const PROBLEM_CAUSES=['Changeover','Move Machine','เครื่องเสีย','Raceway Roundness','Raceway Shape','Bore Roundness','รอ QC','รอ Part change','รองานผลิต','ไม่มีช่าง'];
 function openLogProblem(){
   if(!live()) return;
-  const machines=RAW.machines.slice().sort((a,b)=>a.code.localeCompare(b.code)).map(m=>m.code);
   const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const causeOpts=PROBLEM_CAUSES.map(c=>`<option>${c}</option>`).join('');
   const body=`
    <div class="field row2"><div><label>Model</label><div class="combo"><input id="dModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="dModelList" hidden></div></div></div>
-     <div><label>เครื่องจักร <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><div class="combo"><input id="dMac" autocomplete="off" placeholder="เช่น IG401-RW"><div class="combo-list" id="dMacList" hidden></div></div></div></div>
-   <div class="field"><label>สาเหตุ</label><select id="dReason">${causeOpts}</select></div>
+     <div><label>Line <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><div class="combo"><input id="dLine" autocomplete="off" placeholder="เช่น IG401"><div class="combo-list" id="dLineList" hidden></div></div></div></div>
+   <div class="field row2"><div><label>เครื่องจักร <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><select id="dType">${typeSelectOpts('',true)}</select></div>
+     <div><label>สาเหตุ</label><select id="dReason">${causeOpts}</select></div></div>
    <div class="field"><label>เวลาที่เริ่มเกิด</label><input id="dWhen" type="datetime-local"></div>
-   <div class="hint2">กดบันทึก = เริ่มจับเวลาหยุด · เวลาจะนับไปเรื่อยๆ จนกดปุ่ม "ปกติ" ในตาราง ระบบจึงคิดจำนวนนาที</div>`;
+   <div class="hint2">กดบันทึก = เริ่มจับเวลาหยุด จนกดปุ่ม "ปกติ" ในตาราง · Line + เครื่องจักร ช่วยระบุสถานีให้แม่นขึ้น</div>`;
   openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">เริ่มจับเวลา</button>`);
-  setupCombo($('#dMac'),$('#dMacList'),machines);
+  setupCombo($('#dLine'),$('#dLineList'),allLines());
   setupCombo($('#dModel'),$('#dModelList'),models);
   const now=new Date(); now.setSeconds(0,0); $('#dWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#dSave').onclick=async()=>{
     const reasonName=$('#dReason').value.trim();
     if(!reasonName) return toast('เลือกสาเหตุ','err');
-    const code=$('#dMac').value.trim();
-    const mac=code?RAW.machines.find(m=>m.code===code):null;
-    if(code&&!mac) return toast('ไม่พบเครื่อง '+code+' (เว้นว่างได้ถ้าไม่มี)','err');
     try{
       let reason=(RAW.reasons||[]).find(r=>r.name===reasonName);
       let reasonId=reason?reason.id:null;
       if(!reasonId){ const r=await sbInsert('downtime_reasons',{name:reasonName},true); reasonId=r.id; }
       const dv=$('#dWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
-      await sbInsert('downtime_logs',{machine_id:mac?mac.id:null,model:$('#dModel').value.trim()||null,
-        reason_id:reasonId,minutes:0,occurred_on,ended_at:null});
+      await sbInsert('downtime_logs',{machine_id:stationId($('#dLine').value.trim(),$('#dType').value),
+        model:$('#dModel').value.trim()||null,reason_id:reasonId,minutes:0,occurred_on,ended_at:null});
       closeModal(); await afterWrite('เริ่มจับเวลาปัญหาแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
   };
@@ -1615,7 +1671,7 @@ function wireFeatures(){
   $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#overlay').hidden) closeModal(); });
   $('#board').addEventListener('click',e=>{ const b=e.target.closest('.asg'); if(b){ e.stopPropagation(); openAssign(b.dataset.asg);} });
-  $('#machineTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.code) openEditMachine(tr.dataset.code); });
+  $('#machineTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.line) openLineDetail(tr.dataset.line); });
   $('#skillTbl').addEventListener('click',e=>{ const c=e.target.closest('.skill.edit'); if(c) cycleSkill(c.dataset.emp,c.dataset.col,parseInt(c.textContent,10)||0); });
   $('#btnAddPart')?.addEventListener('click',()=>openEditPart(null));
   $('#partsTbl')?.addEventListener('click',e=>{
