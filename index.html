@@ -345,7 +345,7 @@
     </nav>
     <div class="shiftbox">
       <div class="k">Active Shift</div>
-      <div class="v">A · 06–14</div>
+      <div class="v" id="shiftName">Day · 06–14</div>
       <div class="lead" id="shiftLead">หัวหน้า: —</div>
     </div>
   </aside>
@@ -881,6 +881,8 @@ function renderAll(){
   const emps=(RAW&&RAW.employees)||[];
   const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
   const sl=$('#shiftLead'); if(sl) sl.textContent = head? 'หัวหน้า: '+head.full_name : 'หัวหน้า: —';
+  const hr=new Date().getHours(); const sn=$('#shiftName');
+  if(sn) sn.textContent=(hr>=6&&hr<14)?'Day · 06–14':'Night · 14–22';
 }
 function setConn(){
   const c=$('#conn');
@@ -918,9 +920,14 @@ function cpkUpper(samples,usl){
 function buildState(){
   const jobsRaw=RAW.jobs;
   // machines
+  // OEE อัตโนมัติต่อเครื่อง จากบันทึกผลผลิต (ไม่มีข้อมูล → ใช้ค่าที่ตั้งไว้)
+  const prodByMac={};
+  (RAW.production||[]).forEach(p=>{ if(!p.machine_id) return; const a=prodByMac[p.machine_id]=prodByMac[p.machine_id]||{run:0,plan:0,good:0,scrap:0};
+    a.run+=p.run_min||0; a.plan+=p.planned_min||0; a.good+=p.good_qty||0; a.scrap+=p.scrap_qty||0; });
+  const macOee=(m)=>{ const a=prodByMac[m.id]; if(a&&a.plan>0){ const avail=a.run/a.plan, q=(a.good+a.scrap)?a.good/(a.good+a.scrap):0; return Math.round(avail*q*100); } return m.oee; };
   state.machines=RAW.machines.map(m=>{
     const cur=jobsRaw.find(j=>j.machine_id===m.id && ACTIVE.includes(j.stage));
-    return {code:m.code,line:m.line||'',model:m.model||'',type:m.machine_types?.name||'',status:m.status,oee:m.oee,
+    return {id:m.id,code:m.code,line:m.line||'',model:m.model||'',type:m.machine_types?.name||'',status:m.status,oee:macOee(m),
       oee_target:m.oee_target,
       job:cur?.work_orders?.part_numbers?.part_no||null,
       operator:cur?first(cur.employees?.full_name):'—'};
@@ -1275,9 +1282,8 @@ function openAddMachine(){
    <div class="field row2"><div><label>Model (bearing)</label><div class="combo"><input id="mModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="mModelList" hidden></div></div></div>
      <div><label>Line</label><div class="combo"><input id="mLine" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น IG40"><div class="combo-list" id="mLineList" hidden></div></div></div></div>
    <div class="field"><label>เครื่องจักร</label><select id="mType">${typeOpts}</select></div>
-   <div class="field row2"><div><label>สถานะ</label><select id="mStatus">${stOpts}</select></div>
-     <div><label>OEE %</label><input id="mOee" type="number" min="0" max="100" value="0"></div></div>
-   <div class="hint2">รหัสเครื่องจะสร้างอัตโนมัติจาก Line + เครื่องจักร (เช่น IG401-RW)</div>`;
+   <div class="field"><label>สถานะ</label><select id="mStatus">${stOpts}</select></div>
+   <div class="hint2">รหัสเครื่องจะสร้างอัตโนมัติจาก Line + เครื่องจักร (เช่น IG401-RW) · OEE คำนวณจากผลผลิตอัตโนมัติ</div>`;
   openModal('เพิ่มเครื่องจักร',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="mSave">เพิ่ม</button>`);
   setupCombo($('#mLine'),$('#mLineList'),lines);
   setupCombo($('#mModel'),$('#mModelList'),models);
@@ -1287,7 +1293,7 @@ function openAddMachine(){
     const OC={'Raceway':'RW','Bore':'BR','Auto check':'AC','Honing':'HN'};
     const oc=OC[opName]||opName.replace(/\s/g,'').slice(0,2).toUpperCase();
     const code=(line||'MC')+'-'+oc;
-    try{ await sbInsert('machines',{code,line:line||null,model:$('#mModel').value.trim()||null,type_id:typeId,status:$('#mStatus').value,oee:parseInt($('#mOee').value,10)||0});
+    try{ await sbInsert('machines',{code,line:line||null,model:$('#mModel').value.trim()||null,type_id:typeId,status:$('#mStatus').value,oee:0});
       closeModal(); await afterWrite('เพิ่มเครื่อง '+code);
     }catch(e){ toast(String(e.message||e).includes('duplicate')?'สถานีนี้มีอยู่แล้ว ('+code+')':'ผิดพลาด: '+(e.message||e),'err'); } };
 }
@@ -1298,21 +1304,21 @@ function openLineDetail(line){
   const rows=L.stations.map(m=>`
     <div class="oprow" data-code="${m.code}">
       <span style="flex:1;font-family:var(--mono);font-size:12px;color:var(--tx)">${m.type}</span>
-      <select class="lsStatus" style="flex:none;width:120px">${stOpts(m.status)}</select>
-      <input class="lsOee" type="number" min="0" max="100" value="${m.oee}" style="width:66px" title="OEE %">
+      <select class="lsStatus" style="flex:none;width:130px">${stOpts(m.status)}</select>
+      <span style="flex:none;width:70px;text-align:right;font-family:var(--mono);font-weight:600;color:${oeeColor(m.oee)}">${m.oee}%</span>
     </div>`).join('');
   const body=`<div class="hint2" style="margin-bottom:12px">Line <b style="color:var(--cool)">${line}</b> · Model กำลังผลิต: ${L.models.join(', ')||'— ว่าง'}</div>${rows}
-    <div class="hint2" style="margin-top:10px">ปรับสถานะ/OEE ของแต่ละเครื่องจักรใน Line นี้ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
+    <div class="hint2" style="margin-top:10px">OEE คำนวณอัตโนมัติจากบันทึกผลผลิต · ปรับได้เฉพาะสถานะ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
   openModal('เครื่องจักรใน Line · '+line,body,`<button class="btn ghost" onclick="closeModal()">ปิด</button><button class="btn primary" id="lsSave">บันทึก</button>`);
   $('#lsSave').onclick=async()=>{
     try{
       const updates=[];
       $('#modal').querySelectorAll('.oprow').forEach(r=>{
         const m=RAW.machines.find(x=>x.code===r.dataset.code); if(!m) return;
-        const status=r.querySelector('.lsStatus').value, oee=parseInt(r.querySelector('.lsOee').value,10)||0;
-        if(status!==m.status||oee!==m.oee) updates.push({id:m.id,status,oee});
+        const status=r.querySelector('.lsStatus').value;
+        if(status!==m.status) updates.push({id:m.id,status});
       });
-      for(const u of updates) await sbUpdate('machines',u.id,{status:u.status,oee:u.oee});
+      for(const u of updates) await sbUpdate('machines',u.id,{status:u.status});
       closeModal(); await afterWrite(updates.length?('อัปเดต '+updates.length+' เครื่อง'):'ไม่มีการเปลี่ยนแปลง');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
   };
@@ -1616,9 +1622,8 @@ function openLogProblem(){
      <div><label>Line <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><div class="combo"><input id="dLine" autocomplete="off" placeholder="เช่น IG401"><div class="combo-list" id="dLineList" hidden></div></div></div></div>
    <div class="field row2"><div><label>เครื่องจักร <span style="color:var(--tx-faint)">(ไม่บังคับ)</span></label><select id="dType">${typeSelectOpts('',true)}</select></div>
      <div><label>สาเหตุ</label><select id="dReason">${causeOpts}</select></div></div>
-   <div class="field"><label>เวลาที่เริ่มเกิด</label><input id="dWhen" type="datetime-local"></div>
-   <div class="hint2">กดบันทึก = เริ่มจับเวลาหยุด จนกดปุ่ม "ปกติ" ในตาราง · Line + เครื่องจักร ช่วยระบุสถานีให้แม่นขึ้น</div>`;
-  openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">เริ่มจับเวลา</button>`);
+   <div class="field"><label>เวลาที่เริ่มเกิด</label><input id="dWhen" type="datetime-local"></div>`;
+  openModal('บันทึกปัญหา / หยุดเดินเครื่อง',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="dSave">บันทึก</button>`);
   setupCombo($('#dLine'),$('#dLineList'),allLines());
   setupCombo($('#dModel'),$('#dModelList'),models);
   const now=new Date(); now.setSeconds(0,0); $('#dWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
