@@ -337,6 +337,7 @@
       <a data-v="overview" class="on"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Control Room</a>
       <a data-v="dispatch"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="10"/><rect x="17" y="4" width="4" height="13"/></svg>Dispatch Board</a>
       <a data-v="problem"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17v.5"/></svg>บันทึกปัญหา</a>
+      <a data-v="production"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>บันทึกผลผลิต</a>
       <div class="lbl">Resources</div>
       <a data-v="machines"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Machines</a>
       <a data-v="people"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17.5 14c2.5 0 4.5 2 4.5 5"/></svg>People & Skills</a>
@@ -409,19 +410,22 @@
 
     <section class="view" id="v-machines" hidden>
       <div class="panel">
-        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnLogProd" style="margin-left:8px">+ บันทึกผลผลิต</button><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
+        <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
         <table class="tbl" id="machineTbl">
           <thead><tr><th>Line</th><th>Model กำลังผลิต</th><th>สถานะ</th><th>OEE เฉลี่ย</th><th>เครื่องจักรใน Line</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <div class="panel" style="margin-top:16px">
-        <h2>ผลผลิตล่าสุด <span class="tag">ดี/เสีย · เวลาเดิน → OEE จริง</span></h2>
+    </section>
+
+    <section class="view" id="v-production" hidden>
+      <div class="panel">
+        <h2>บันทึกผลผลิต <span class="tag">ผลผลิตราย Line → OEE จริง</span><button class="addbtn" id="btnLogProd" style="margin-left:auto">+ บันทึกผลผลิต</button></h2>
         <table class="tbl" id="prodTbl">
           <thead><tr><th>เวลา</th><th>Line</th><th>Model</th><th>กะ</th><th>ดี</th><th>เสีย</th><th>เดิน/แผน (น.)</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
-        <div class="hint">พอมีบันทึกผลผลิต ระบบจะใช้คำนวณ OEE / Output / Scrap จริง (แทนค่าประมาณ) บน Control Room</div>
+        <div class="hint">บันทึกผลผลิตราย Line → ระบบคำนวณ OEE / Output / Scrap จริงบน Control Room และยอด "ผลิตแล้ว" ราย Order (ตาม Model)</div>
       </div>
     </section>
 
@@ -959,14 +963,15 @@ function cpkUpper(samples,usl){
 function buildState(){
   const jobsRaw=RAW.jobs;
   // machines
-  // OEE อัตโนมัติต่อเครื่อง จากบันทึกผลผลิต (ไม่มีข้อมูล → ใช้ค่าที่ตั้งไว้)
-  const prodByMac={};
-  (RAW.production||[]).forEach(p=>{ if(!p.machine_id) return; const a=prodByMac[p.machine_id]=prodByMac[p.machine_id]||{run:0,plan:0,good:0,scrap:0};
+  // OEE อัตโนมัติราย Line จากบันทึกผลผลิต (ไม่มีข้อมูล → ใช้ค่าที่ตั้งไว้)
+  const prodByLine={};
+  (RAW.production||[]).forEach(p=>{ const ln=p.line||p.machines?.line; if(!ln) return; const a=prodByLine[ln]=prodByLine[ln]||{run:0,plan:0,good:0,scrap:0};
     a.run+=p.run_min||0; a.plan+=p.planned_min||0; a.good+=p.good_qty||0; a.scrap+=p.scrap_qty||0; });
-  const macOee=(m)=>{ const a=prodByMac[m.id]; if(a&&a.plan>0){ const avail=a.run/a.plan, q=(a.good+a.scrap)?a.good/(a.good+a.scrap):0; return Math.round(avail*q*100); } return m.oee; };
+  const lineOee=(ln)=>{ const a=prodByLine[ln]; if(a&&a.plan>0){ const avail=a.run/a.plan, q=(a.good+a.scrap)?a.good/(a.good+a.scrap):0; return Math.round(avail*q*100); } return null; };
   state.machines=RAW.machines.map(m=>{
     const cur=jobsRaw.find(j=>j.machine_id===m.id && ACTIVE.includes(j.stage));
-    return {id:m.id,code:m.code,line:m.line||'',model:m.model||'',type:m.machine_types?.name||'',status:m.status,oee:macOee(m),
+    const lo=lineOee(m.line);
+    return {id:m.id,code:m.code,line:m.line||'',model:m.model||'',type:m.machine_types?.name||'',status:m.status,oee:(lo!=null?lo:m.oee),
       oee_target:m.oee_target,
       job:cur?.work_orders?.part_numbers?.part_no||null,
       operator:cur?first(cur.employees?.full_name):'—'};
@@ -1053,7 +1058,7 @@ function buildState(){
   } else {
     state.kpis={output:done+Math.round(wipQ*0.55),target,avg_oee:oeeAvg,oee_target:oeeTgt,on_time:onTime,scrap:2.4,real:false};
   }
-  state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,line:p.machines?.line||'—',machineType:p.machines?.machine_types?.name||'',model:p.model||'—',
+  state.productionLogs=(RAW.production||[]).slice(0,15).map(p=>({id:p.id,line:p.line||p.machines?.line||'—',model:p.model||'—',
     shift:p.shifts?.name||'—',good:p.good_qty||0,scrap:p.scrap_qty||0,run:p.run_min||0,plan:p.planned_min||0,when:p.occurred_on}));
   // Quality / SPC
   const qc=RAW.quality||[];
@@ -1123,7 +1128,7 @@ async function loadFromSupabase(){
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
     sb.from('downtime_reasons').select('id,name').order('name'),
-    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,model,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,model,line,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
     sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code,line,machine_types(name))').order('occurred_on',{ascending:false}).limit(500),
     sb.from('work_orders').select('id,wo_number,model,quantity,customer,line,due_at,note,status,priority,part_number_id,part_numbers(part_no)').order('due_at'),
     sb.from('app_settings').select('key,value'),
@@ -1151,6 +1156,7 @@ async function boot(){
 const TITLES={overview:['Control Room','ภาพรวมการผลิตแบบเรียลไทม์ · แผนกเจียร'],
   dispatch:['Dispatch Board','จ่ายงานและติดตามสถานะแบบ Kanban'],
   problem:['บันทึกปัญหา','ปัญหา/หยุดเดินเครื่อง (คิดเป็น Downtime)'],
+  production:['บันทึกผลผลิต','ผลผลิตราย Line · ดี/เสีย/เวลา → OEE จริง'],
   machines:['Machines','ทะเบียนและสถานะเครื่องจักร'],
   people:['People & Skills','บุคลากรและตารางความชำนาญ'],
   parts:['Parts & Routing','ทะเบียนตลับลูกปืนและลำดับขั้นตอนเจียร'],
@@ -1699,28 +1705,25 @@ function openLogProduction(){
   const body=`
    <div class="field row2"><div><label>Model</label><div class="combo"><input id="pgModel" autocomplete="off" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="pgModelList" hidden></div></div></div>
      <div><label>Line</label><div class="combo"><input id="pgLine" autocomplete="off" placeholder="เช่น IG401"><div class="combo-list" id="pgLineList" hidden></div></div></div></div>
-   <div class="field row2"><div><label>เครื่องจักร</label><select id="pgType">${typeSelectOpts('',false)}</select></div>
-     <div><label>กะ</label><select id="pgShift">${shiftOpts}</select></div></div>
+   <div class="field row2"><div><label>กะ</label><select id="pgShift">${shiftOpts}</select></div>
+     <div><label>วันที่/เวลา</label><input id="pgWhen" type="datetime-local"></div></div>
    <div class="field row2"><div><label>ชิ้นดี</label><input id="pgGood" type="number" min="0" value="0"></div>
      <div><label>ชิ้นเสีย</label><input id="pgScrap" type="number" min="0" value="0"></div></div>
    <div class="field row2"><div><label>เวลาเดินจริง (นาที)</label><input id="pgRun" type="number" min="0" value="0"></div>
      <div><label>เวลาที่วางแผน (นาที)</label><input id="pgPlan" type="number" min="0" value="480"></div></div>
-   <div class="field"><label>วันที่/เวลา</label><input id="pgWhen" type="datetime-local"></div>
-   <div class="hint2">OEE = (เดินจริง/แผน) × (ดี/(ดี+เสีย)) · Line + เครื่องจักร ระบุสถานีที่ผลิต</div>`;
+   <div class="hint2">OEE = (เดินจริง/แผน) × (ดี/(ดี+เสีย)) · บันทึกราย Line</div>`;
   openModal('บันทึกผลผลิต',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="pgSave">บันทึก</button>`);
   setupCombo($('#pgLine'),$('#pgLineList'),allLines());
   setupCombo($('#pgModel'),$('#pgModelList'),models);
   const now=new Date(); now.setSeconds(0,0); $('#pgWhen').value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#pgSave').onclick=async()=>{
-    const line=$('#pgLine').value.trim(), typeName=$('#pgType').value;
+    const line=$('#pgLine').value.trim();
     if(!line) return toast('เลือก Line','err');
-    const mid=stationId(line,typeName);
-    if(!mid) return toast('ไม่พบสถานี '+line+'-'+opCodeOf(typeName),'err');
     const good=parseInt($('#pgGood').value,10)||0, scrap=parseInt($('#pgScrap').value,10)||0;
     const run=parseInt($('#pgRun').value,10)||0, plan=parseInt($('#pgPlan').value,10)||0;
     if(good+scrap<=0&&run<=0) return toast('กรอกจำนวนหรือเวลาอย่างน้อยหนึ่งอย่าง','err');
     const dv=$('#pgWhen').value; const occurred_on=dv?new Date(dv).toISOString():new Date().toISOString();
-    try{ await sbInsert('production_logs',{machine_id:mid,shift_id:$('#pgShift').value||null,model:$('#pgModel').value.trim()||null,
+    try{ await sbInsert('production_logs',{machine_id:null,line,shift_id:$('#pgShift').value||null,model:$('#pgModel').value.trim()||null,
       good_qty:good,scrap_qty:scrap,run_min:run,planned_min:plan,occurred_on});
       closeModal(); await afterWrite('บันทึกผลผลิตแล้ว');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
