@@ -320,6 +320,10 @@
   #fltText{min-width:240px;flex:1;max-width:340px}
   .fltchk{font-family:var(--mono);font-size:12px;color:var(--tx-dim);display:flex;align-items:center;gap:6px;cursor:pointer}
   .fltcount{font-family:var(--mono);font-size:11px;color:var(--tx-faint);margin-left:auto}
+  .gi{background:var(--bg-2);border:1px solid var(--line);color:var(--tx);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:13px;outline:none}
+  .gi:focus{border-color:var(--cool)}
+  #prodGrid tr.logged{background:rgba(63,185,80,.07)}
+  #prodGrid tr.logged td:first-child{box-shadow:inset 3px 0 0 var(--run)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -420,12 +424,18 @@
 
     <section class="view" id="v-production" hidden>
       <div class="panel">
-        <h2>บันทึกผลผลิต <span class="tag">ผลผลิตราย Line → OEE จริง</span><button class="addbtn" id="btnLogProd" style="margin-left:auto">+ บันทึกผลผลิต</button></h2>
-        <table class="tbl" id="prodTbl">
-          <thead><tr><th>เวลา</th><th>Line</th><th>Model</th><th>กะ</th><th>ดี</th><th>เสีย</th><th>เดิน/แผน (น.)</th><th></th></tr></thead>
+        <h2>บันทึกผลผลิตประจำกะ <span class="tag">ราย Line / วัน / กะ</span></h2>
+        <div class="fltbar">
+          <label class="fltchk">วันที่ <input id="pgDate" type="date" class="fltinput" style="margin-left:6px"></label>
+          <label class="fltchk">กะ <select id="pgShiftSel" class="fltinput" style="margin-left:6px"></select></label>
+          <input id="pgSearch" class="fltinput" placeholder="ค้นหา Line เช่น IG405">
+          <span class="fltcount" id="pgSummary"></span>
+        </div>
+        <table class="tbl" id="prodGrid">
+          <thead><tr><th>Line</th><th>Model</th><th>ดี</th><th>เสีย</th><th>เดินจริง (นาที)</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
-        <div class="hint">บันทึกผลผลิตราย Line → ระบบคำนวณ OEE / Output / Scrap จริงบน Control Room และยอด "ผลิตแล้ว" ราย Order (ตาม Model)</div>
+        <div class="hint">พนักงานประจำ Line กรอกยอดของตัวเองแล้วกด ✓ · บันทึกซ้ำ = อัปเดต (ราย Line/วัน/กะ) · แถวเขียว = บันทึกแล้ว</div>
       </div>
     </section>
 
@@ -883,22 +893,54 @@ function renderDispatch(){
   });
 }
 function renderProduction(){
-  const tb=$('#prodTbl tbody'); if(!tb) return; tb.innerHTML='';
-  const logs=state.productionLogs||[];
-  if(!logs.length){ tb.innerHTML='<tr><td colspan="8" style="color:var(--tx-faint);padding:14px">ยังไม่มีบันทึกผลผลิต</td></tr>'; return; }
-  logs.forEach(d=>{
-    const when=d.when?new Date(d.when).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
-    const tr=el('tr');
-    tr.innerHTML=`<td style="font-family:var(--mono);color:var(--tx-dim);font-size:12px">${when}</td>
-      <td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${d.line}</td>
-      <td style="font-family:var(--mono)">${d.model}</td>
-      <td style="font-family:var(--mono)">${d.shift}</td>
-      <td style="font-family:var(--mono);color:var(--run)">${d.good}</td>
-      <td style="font-family:var(--mono);color:var(--down)">${d.scrap}</td>
-      <td style="font-family:var(--mono);color:var(--tx-dim)">${d.run}/${d.plan}</td>
-      <td><button class="addbtn pddel" data-pd="${d.id}" style="border-color:var(--down);color:var(--down)">ลบ</button></td>`;
+  const tb=$('#prodGrid tbody'); if(!tb) return;
+  const sel=$('#pgShiftSel');
+  if(sel && !sel.options.length){
+    sel.innerHTML=(RAW.shifts||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    const hr=new Date().getHours(); const cur=(RAW.shifts||[]).find(s=>s.name===((hr>=6&&hr<14)?'Day':'Night'));
+    if(cur) sel.value=cur.id;
+  }
+  const dt=$('#pgDate'); if(dt && !dt.value) dt.value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const date=dt?dt.value:'', shiftId=sel?sel.value:'';
+  const recs=(RAW.production||[]).filter(p=>p.line&&p.prod_date===date&&(p.shift_id||'')===(shiftId||''));
+  const byLine={}; recs.forEach(p=>byLine[p.line]=p);
+  const lineModel={}; (state.lines||[]).forEach(l=>lineModel[l.line]=l.setModel||(l.models[0]||''));
+  const allL=allLines();
+  const sumG=recs.reduce((s,p)=>s+(p.good_qty||0),0), sumS=recs.reduce((s,p)=>s+(p.scrap_qty||0),0);
+  const smy=$('#pgSummary'); if(smy) smy.innerHTML=`บันทึกแล้ว <b style="color:var(--run)">${recs.length}</b>/${allL.length} Line · ดี ${fmtInt(sumG)} · เสีย ${fmtInt(sumS)}`;
+  const q=($('#pgSearch')&&$('#pgSearch').value||'').trim().toLowerCase();
+  const lines=q?allL.filter(l=>l.toLowerCase().includes(q)):allL;
+  tb.innerHTML='';
+  if(!lines.length){ tb.innerHTML='<tr><td colspan="6" style="color:var(--tx-faint);padding:14px">ไม่พบ Line</td></tr>'; return; }
+  lines.forEach(ln=>{
+    const ex=byLine[ln];
+    const tr=el('tr',ex?'logged':''); tr.dataset.line=ln;
+    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${ln}</td>
+      <td><input class="gi pgM" value="${ex?(ex.model||''):(lineModel[ln]||'')}" placeholder="Model" style="width:88px"></td>
+      <td><input class="gi pgG" type="number" min="0" value="${ex&&ex.good_qty!=null?ex.good_qty:''}" placeholder="0" style="width:76px"></td>
+      <td><input class="gi pgS" type="number" min="0" value="${ex&&ex.scrap_qty!=null?ex.scrap_qty:''}" placeholder="0" style="width:64px"></td>
+      <td><input class="gi pgR" type="number" min="0" value="${ex&&ex.run_min!=null?ex.run_min:''}" placeholder="0" style="width:80px"></td>
+      <td><button class="addbtn pgSaveBtn" data-line="${ln}" style="border-color:var(--cool);color:var(--cool)">✓ บันทึก</button></td>`;
     tb.appendChild(tr);
   });
+}
+async function saveProdRow(ln){
+  if(!live()) return;
+  const date=$('#pgDate').value, shiftId=$('#pgShiftSel').value||null;
+  if(!date) return toast('เลือกวันที่','err');
+  const tr=$('#prodGrid tbody tr[data-line="'+ln+'"]'); if(!tr) return;
+  const model=tr.querySelector('.pgM').value.trim()||null;
+  const good=parseInt(tr.querySelector('.pgG').value,10)||0;
+  const scrap=parseInt(tr.querySelector('.pgS').value,10)||0;
+  const run=parseInt(tr.querySelector('.pgR').value,10)||0;
+  if(good+scrap<=0&&run<=0) return toast('กรอกยอด ดี/เสีย หรือ เวลาเดิน','err');
+  const occurred_on=new Date(date+'T12:00:00').toISOString();
+  const row={machine_id:null,line:ln,prod_date:date,shift_id:shiftId,model,good_qty:good,scrap_qty:scrap,run_min:run,planned_min:480,occurred_on};
+  const ex=(RAW.production||[]).find(p=>p.line===ln&&p.prod_date===date&&(p.shift_id||'')===(shiftId||''));
+  try{
+    if(ex) await sbUpdate('production_logs',ex.id,row); else await sbInsert('production_logs',row);
+    await afterWrite('บันทึก '+ln+' แล้ว');
+  }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
 function renderBottleneck(){
   const box=$('#bnPanel'); if(!box) return;
@@ -1128,7 +1170,7 @@ async function loadFromSupabase(){
     sb.from('shifts').select('id,name'),
     sb.from('part_operations').select('id,part_number_id,seq,op_name,machine_type_id,std_cycle_sec').order('seq'),
     sb.from('downtime_reasons').select('id,name').order('name'),
-    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,model,line,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,prod_date,good_qty,scrap_qty,run_min,planned_min,model,line,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(2000),
     sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code,line,machine_types(name))').order('occurred_on',{ascending:false}).limit(500),
     sb.from('work_orders').select('id,wo_number,model,quantity,customer,line,due_at,note,status,priority,part_number_id,part_numbers(part_no)').order('due_at'),
     sb.from('app_settings').select('key,value'),
@@ -1790,6 +1832,10 @@ function wireFeatures(){
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
   $('#btnLogProblem')?.addEventListener('click',openLogProblem);
   $('#btnLogProd')?.addEventListener('click',openLogProduction);
+  $('#pgDate')?.addEventListener('change',()=>renderProduction());
+  $('#pgShiftSel')?.addEventListener('change',()=>renderProduction());
+  $('#pgSearch')?.addEventListener('input',()=>renderProduction());
+  $('#prodGrid')?.addEventListener('click',e=>{ const b=e.target.closest('.pgSaveBtn'); if(b) saveProdRow(b.dataset.line); });
   $('#btnLogQC')?.addEventListener('click',openLogQuality);
   $('#qcTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.qcdel'); if(b&&confirm('ลบผลตรวจนี้?')) delQuality(b.dataset.qc); });
   $('#qcLotSearch')?.addEventListener('input',()=>renderQcRecent());
