@@ -380,16 +380,20 @@
     </section>
 
     <section class="view" id="v-dispatch" hidden>
-      <div class="toolbar"><button class="addbtn" id="btnNewWO">+ เพิ่มงานตามแผน</button></div>
-      <div class="panel bnpanel" id="bnPanel" style="margin-bottom:16px;padding:14px 16px"></div>
+      <div class="toolbar"><button class="addbtn" id="btnNewOrder">+ เพิ่ม Order ตามแผน</button></div>
+      <div class="panel" id="targetPanel" style="margin-bottom:16px"></div>
       <div class="fltbar">
-        <input id="fltText" class="fltinput" placeholder="ค้นหา WO / Model / Line / หมายเหตุ…">
-        <select id="fltPri" class="fltinput"><option value="">ทุกความสำคัญ</option><option value="1">P1 สูงสุด</option><option value="2">P2</option><option value="3">P3</option></select>
-        <label class="fltchk"><input type="checkbox" id="fltLate"> เฉพาะงานล่าช้า</label>
-        <span class="fltcount" id="fltCount"></span>
+        <input id="ordText" class="fltinput" placeholder="ค้นหา Model / ลูกค้า / Line…">
+        <span class="fltcount" id="ordCount"></span>
       </div>
-      <div class="board" id="board"></div>
-      <div class="hint"><span class="k">ลาก</span> การ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะงาน หรือใช้ปุ่ม ◀ ▶ · การเปลี่ยนแปลงบันทึกกลับฐานข้อมูลอัตโนมัติ</div>
+      <div class="panel">
+        <h2>แผนงานราย Order <span class="tag">Model · ลูกค้า · จำนวน · ผลิตแล้ว</span></h2>
+        <table class="tbl" id="orderTbl">
+          <thead><tr><th>Model</th><th>ลูกค้า</th><th>Line</th><th>เป้า (ชิ้น)</th><th>ผลิตแล้ว</th><th>คงเหลือ</th><th>ความคืบหน้า</th><th>ครบกำหนด</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้ไข/ลบ Order · ยอด "ผลิตแล้ว" ดึงจากบันทึกผลผลิตตาม Model อัตโนมัติ</div>
+      </div>
     </section>
 
     <section class="view" id="v-problem" hidden>
@@ -687,7 +691,7 @@ function boardFilter(jobs){
   });
 }
 function renderBoard(){
-  const board=$('#board');board.innerHTML='';
+  const board=$('#board'); if(!board) return; board.innerHTML='';
   const shown=boardFilter(state.jobs);
   const fc=$('#fltCount'); if(fc) fc.textContent=`แสดง ${shown.length}/${state.jobs.length} งาน`;
   STAGES.forEach(([key,label])=>{
@@ -840,6 +844,40 @@ function renderQuality(){
   else cpk.forEach(x=>{ const tr=el('tr'); tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${x.part}</td><td style="font-family:var(--mono)">${x.n}</td><td>${cpkCell(x.cpkRnd)}</td><td>${cpkCell(x.cpkRa)}</td>`; ct.appendChild(tr); });
   renderQcRecent();
 }
+function fmtInt(n){ return (n||0).toLocaleString('en-US'); }
+function renderDispatch(){
+  const tp=$('#targetPanel'); if(!tp) return;
+  const t=state.orderTotals||{ordered:0,produced:0,target:0,lateCount:0};
+  const pct=t.target?Math.min(100,Math.round(100*t.produced/t.target)):0;
+  const opct=t.target?Math.min(100,Math.round(100*t.ordered/t.target)):0;
+  tp.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <span style="font-family:var(--disp);font-size:15px;font-weight:600">เป้าหลัก (Main Target)</span>
+      <button class="addbtn" id="btnSetTarget" style="margin-left:auto">ตั้งเป้าหลัก</button></div>
+    <div style="font-family:var(--disp);font-size:30px;font-weight:700">${fmtInt(t.produced)} <small style="font-size:15px;color:var(--tx-faint)">/ ${fmtInt(t.target)} ชิ้น</small></div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--tx-dim);margin:6px 0 8px">ผลิตแล้ว ${pct}% ของเป้า · วางแผนไว้ ${fmtInt(t.ordered)} (${opct}%) · ${t.lateCount?`<span style="color:var(--down)">Order ล่าช้า ${t.lateCount}</span>`:'ไม่มี Order ล่าช้า'}</div>
+    <div class="bar" style="height:10px"><i style="width:${pct}%;background:${pct>=80?'var(--run)':'var(--idle)'}"></i></div>`;
+  $('#btnSetTarget')&&($('#btnSetTarget').onclick=setMainTarget);
+  // orders table
+  const tb=$('#orderTbl tbody'); if(!tb) return; tb.innerHTML='';
+  const q=($('#ordText')&&$('#ordText').value||'').trim().toLowerCase();
+  const list=q?state.orders.filter(o=>`${o.model} ${o.customer} ${o.line}`.toLowerCase().includes(q)):state.orders;
+  const oc=$('#ordCount'); if(oc) oc.textContent=`${list.length} order`;
+  if(!list.length){ tb.innerHTML='<tr><td colspan="8" style="color:var(--tx-faint);padding:16px">ยังไม่มี Order — กด "เพิ่ม Order ตามแผน"</td></tr>'; return; }
+  list.forEach(o=>{
+    const due=o.due?new Date(o.due).toLocaleDateString('th-TH',{day:'2-digit',month:'short'}):'—';
+    const col=o.pct>=100?'var(--run)':o.pct>=50?'var(--idle)':'var(--down)';
+    const tr=el('tr','clickable'); tr.dataset.ord=o.id; tr.title='คลิกเพื่อแก้ไข/ลบ';
+    tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${o.model}</td>
+      <td>${o.customer}</td>
+      <td style="font-family:var(--mono);color:var(--cool)">${o.line||'—'}</td>
+      <td style="font-family:var(--mono)">${fmtInt(o.qty)}</td>
+      <td style="font-family:var(--mono);color:var(--run)">${fmtInt(o.produced)}</td>
+      <td style="font-family:var(--mono);color:var(--tx-dim)">${fmtInt(o.remaining)}</td>
+      <td style="min-width:110px"><div class="bar" style="height:7px;margin-bottom:3px"><i style="width:${o.pct}%;background:${col}"></i></div><span style="font-family:var(--mono);font-size:11px;color:${col}">${o.pct}%</span></td>
+      <td><span style="font-family:var(--mono);font-size:12px;color:${o.late?'var(--down)':'var(--tx-dim)'}">${due}${o.late?' ⚠':''}</span></td>`;
+    tb.appendChild(tr);
+  });
+}
 function renderProduction(){
   const tb=$('#prodTbl tbody'); if(!tb) return; tb.innerHTML='';
   const logs=state.productionLogs||[];
@@ -877,7 +915,7 @@ function renderBottleneck(){
 }
 function renderAll(){
   renderKpis();renderMachineGrid();renderPareto();renderWip();
-  renderMachineTbl();renderPeople();renderSkills();renderBoard();renderBottleneck();renderDowntime();renderProduction();renderQuality();
+  renderMachineTbl();renderPeople();renderSkills();renderDispatch();renderDowntime();renderProduction();renderQuality();
   if(typeof renderParts==='function') renderParts();
   const emps=(RAW&&RAW.employees)||[];
   const head=emps.find(e=>e.role==='dept_manager')||emps.find(e=>e.role==='shift_leader')||emps.find(e=>e.role==='lead_technician');
@@ -892,7 +930,7 @@ function setConn(){
 }
 
 /* ---------------- Supabase data layer ---------------- */
-let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[],reasons:[],production:[],quality:[]};
+let RAW={machineTypes:[],machines:[],employees:[],skills:[],jobs:[],downtime:[],parts:[],shifts:[],operations:[],reasons:[],production:[],quality:[],orders:[],settings:[]};
 const ACTIVE=['setup','running','inspection'];
 const first=n=>n?String(n).trim().split(/\s+/)[0]:'—';
 
@@ -942,7 +980,8 @@ function buildState(){
   state.lines=Object.keys(lineMap).sort().map(line=>{
     const st=lineMap[line].slice().sort((a,b)=>(OPORD[a.type]||9)-(OPORD[b.type]||9));
     const down=st.filter(m=>m.status==='down').length, idle=st.filter(m=>m.status==='idle').length;
-    return {line,stations:st,models:[...(lineModels[line]||[])],down,idle,
+    const setM=[...new Set(st.map(m=>m.model).filter(Boolean))];
+    return {line,stations:st,setModel:setM[0]||'',models:setM.length?setM:[...(lineModels[line]||[])],down,idle,
       oee:Math.round(st.reduce((s,m)=>s+m.oee,0)/st.length),
       status:down>0?'down':(idle>0?'idle':'running')};
   });
@@ -1033,6 +1072,23 @@ function buildState(){
   state.qcRecent=qc.slice(0,20).map(q=>({id:q.id,when:q.occurred_on,part:q.part_numbers?.part_no||'—',
     lot:q.lot_no||'—',line:q.machines?.line||'—',op:q.op_name||'—',roundness:q.roundness,ra:q.ra,
     anderon:q.anderon,result:q.result,defect:q.defect}));
+  // Orders (Dispatch แบบใหม่) — target หลัก + แผนราย Model
+  const settings={}; (RAW.settings||[]).forEach(s=>settings[s.key]=s.value);
+  state.mainTarget=parseInt(settings.main_target||'0',10)||0;
+  const prodByModel={};
+  (RAW.production||[]).forEach(p=>{ if(p.model){ prodByModel[p.model]=(prodByModel[p.model]||0)+(p.good_qty||0); } });
+  const nowT=Date.now();
+  state.orders=(RAW.orders||[]).map(o=>{
+    const model=o.model||((o.part_numbers?.part_no||'').replace(/-(IR|OR)$/i,''))||'—';
+    const produced=prodByModel[model]||0, qty=o.quantity||0;
+    return {id:o.id,wo:o.wo_number,model,customer:o.customer||'—',qty,produced,
+      remaining:Math.max(0,qty-produced),pct:qty?Math.min(100,Math.round(100*produced/qty)):0,
+      line:o.line||'',due:o.due_at,note:o.note||'',status:o.status,priority:o.priority||3,
+      late:!!(o.due_at&&new Date(o.due_at).getTime()<nowT&&produced<qty)};
+  }).sort((a,b)=>(a.priority-b.priority)||a.model.localeCompare(b.model));
+  state.orderTotals={ordered:state.orders.reduce((s,o)=>s+o.qty,0),
+    produced:(RAW.production||[]).reduce((s,p)=>s+(p.good_qty||0),0),
+    target:state.mainTarget,lateCount:state.orders.filter(o=>o.late).length};
   // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
   const opOrder={}, opActive={};
   RAW.operations.forEach(o=>{ if(!(o.op_name in opOrder)||o.seq<opOrder[o.op_name]) opOrder[o.op_name]=o.seq; });
@@ -1069,12 +1125,14 @@ async function loadFromSupabase(){
     sb.from('downtime_reasons').select('id,name').order('name'),
     sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,good_qty,scrap_qty,run_min,planned_min,model,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(500),
     sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code,line,machine_types(name))').order('occurred_on',{ascending:false}).limit(500),
+    sb.from('work_orders').select('id,wo_number,model,quantity,customer,line,due_at,note,status,priority,part_number_id,part_numbers(part_no)').order('due_at'),
+    sb.from('app_settings').select('key,value'),
   ];
-  const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc]=await Promise.all(q);
-  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc].find(r=>r.error);
+  const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc,wo,st]=await Promise.all(q);
+  const err=[mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc,wo,st].find(r=>r.error);
   if(err) throw err.error;
   RAW={machineTypes:mt.data,machines:mac.data,employees:emp.data,skills:sk.data,
-       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data,reasons:rs.data,production:pl.data,quality:qc.data};
+       jobs:jb.data,downtime:dt.data,parts:pt.data,shifts:sh.data,operations:po.data,reasons:rs.data,production:pl.data,quality:qc.data,orders:wo.data,settings:st.data};
   buildState();
 }
 
@@ -1157,6 +1215,64 @@ function operatorOptions(typeId,sel){
 function nextWO(){ let max=0; RAW.jobs.forEach(j=>{const n=parseInt(String(j.work_orders?.wo_number||'').replace(/\D/g,''),10); if(n>max)max=n;});
   return 'WO-'+String(max+1).padStart(4,'0'); }
 function localDatetime(d){ return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+
+/* ---- Orders (Dispatch แบบใหม่) ---- */
+function nextOrderNo(){ let max=1000; (RAW.orders||[]).forEach(o=>{const n=parseInt(String(o.wo_number||'').replace(/\D/g,''),10); if(n>max)max=n;}); return 'WO-'+String(max+1); }
+async function setMainTarget(){
+  const v=prompt('ตั้งเป้าหลัก (จำนวนชิ้นรวม) เช่น 109000000', state.mainTarget||0);
+  if(v===null) return;
+  const n=parseInt(String(v).replace(/[,\s]/g,''),10);
+  if(isNaN(n)||n<0) return toast('กรอกตัวเลข','err');
+  try{ const {error}=await sb.from('app_settings').upsert({key:'main_target',value:String(n)},{onConflict:'key'}); if(error) throw error;
+    await afterWrite('ตั้งเป้าหลัก '+n.toLocaleString('en-US')+' ชิ้น'); }
+  catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
+function orderFormBody(o){
+  o=o||{};
+  return `
+   <div class="field row2"><div><label>Model</label><div class="combo"><input id="oModel" autocomplete="off" value="${o.model||''}" placeholder="พิมพ์ค้นหา เช่น 6001"><div class="combo-list" id="oModelList" hidden></div></div></div>
+     <div><label>ลูกค้า</label><input id="oCust" value="${(o.customer||'').replace(/"/g,'&quot;')}" placeholder="เช่น Mitsubishi"></div></div>
+   <div class="field row2"><div><label>จำนวน (ชิ้น)</label><input id="oQty" type="number" min="0" value="${o.qty||0}"></div>
+     <div><label>Line (ไม่บังคับ)</label><div class="combo"><input id="oLine" autocomplete="off" value="${o.line||''}" placeholder="เช่น IG401"><div class="combo-list" id="oLineList" hidden></div></div></div></div>
+   <div class="field row2"><div><label>ความสำคัญ</label><select id="oPri">${[1,2,3].map(p=>`<option value="${p}" ${p===(o.priority||2)?'selected':''}>P${p}${p===1?' สูงสุด':''}</option>`).join('')}</select></div>
+     <div><label>ครบกำหนด</label><input id="oDue" type="date" value="${o.due?new Date(o.due).toISOString().slice(0,10):''}"></div></div>
+   <div class="field"><label>หมายเหตุ</label><input id="oNote" value="${(o.note||'').replace(/"/g,'&quot;')}" placeholder="เช่น งานเร่ง · ล็อตพิเศษ"></div>`;
+}
+function wireOrderForm(){
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
+  setupCombo($('#oModel'),$('#oModelList'),models);
+  setupCombo($('#oLine'),$('#oLineList'),allLines());
+}
+function readOrderForm(){
+  const model=$('#oModel').value.trim(), qty=parseInt($('#oQty').value,10)||0;
+  if(!model){ toast('เลือก Model','err'); return null; }
+  if(qty<=0){ toast('กรอกจำนวน','err'); return null; }
+  const dv=$('#oDue').value;
+  return {model,quantity:qty,customer:$('#oCust').value.trim()||'',line:$('#oLine').value.trim()||null,
+    due_at:dv?new Date(dv+'T17:00:00').toISOString():null,priority:parseInt($('#oPri').value,10),note:$('#oNote').value.trim()||null};
+}
+function openNewOrder(){
+  if(!live()) return;
+  openModal('เพิ่ม Order ตามแผน',orderFormBody(),`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="oSave">สร้าง Order</button>`);
+  wireOrderForm();
+  $('#oSave').onclick=async()=>{ const d=readOrderForm(); if(!d) return;
+    try{ await sbInsert('work_orders',{wo_number:nextOrderNo(),status:'in_progress',...d});
+      closeModal(); await afterWrite('สร้าง Order '+d.model); }
+    catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
+function openEditOrder(id){
+  if(!live()) return; const o=state.orders.find(x=>x.id===id); if(!o) return;
+  openModal('แก้ไข Order · '+o.model,orderFormBody(o),
+    `<button class="btn danger" id="oDel">ลบ</button><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="oSave">บันทึก</button>`);
+  wireOrderForm();
+  $('#oSave').onclick=async()=>{ const d=readOrderForm(); if(!d) return;
+    try{ await sbUpdate('work_orders',id,d); closeModal(); await afterWrite('อัปเดต Order แล้ว'); }
+    catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+  $('#oDel').onclick=async()=>{ if(!confirm('ลบ Order '+o.model+' ('+o.customer+')?')) return;
+    try{ await sb.from('job_assignments').delete().eq('work_order_id',id); await sbDelete('work_orders',id);
+      closeModal(); await afterWrite('ลบ Order แล้ว'); }
+    catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); } };
+}
 
 /* ---- New Work Order + dispatch ---- */
 function openNewWO(){
@@ -1301,6 +1417,7 @@ function openAddMachine(){
 function openLineDetail(line){
   if(!live()) return;
   const L=(state.lines||[]).find(x=>x.line===line); if(!L) return;
+  const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
   const stOpts=(sel)=>Object.keys(STL).map(s=>`<option value="${s}" ${s===sel?'selected':''}>${STL[s]}</option>`).join('');
   const rows=L.stations.map(m=>`
     <div class="oprow" data-code="${m.code}">
@@ -1308,19 +1425,25 @@ function openLineDetail(line){
       <select class="lsStatus" style="flex:none;width:130px">${stOpts(m.status)}</select>
       <span style="flex:none;width:70px;text-align:right;font-family:var(--mono);font-weight:600;color:${oeeColor(m.oee)}">${m.oee}%</span>
     </div>`).join('');
-  const body=`<div class="hint2" style="margin-bottom:12px">Line <b style="color:var(--cool)">${line}</b> · Model กำลังผลิต: ${L.models.join(', ')||'— ว่าง'}</div>${rows}
-    <div class="hint2" style="margin-top:10px">OEE คำนวณอัตโนมัติจากบันทึกผลผลิต · ปรับได้เฉพาะสถานะ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
+  const body=`<div class="hint2" style="margin-bottom:10px">Line <b style="color:var(--cool)">${line}</b></div>
+    <div class="field"><label>Model ที่ผลิต (ตั้งทั้ง Line)</label><div class="combo"><input id="lsModel" autocomplete="off" value="${L.setModel||''}" placeholder="พิมพ์ค้นหา เช่น 6205"><div class="combo-list" id="lsModelList" hidden></div></div></div>
+    <div style="margin:6px 0 4px;font-family:var(--mono);font-size:11px;color:var(--tx-faint)">สถานะ/OEE แต่ละเครื่องจักร</div>${rows}
+    <div class="hint2" style="margin-top:10px">OEE คำนวณอัตโนมัติจากบันทึกผลผลิต · ตั้ง Model และปรับสถานะได้ (เช่นตั้ง Raceway เป็น "เสีย")</div>`;
   openModal('เครื่องจักรใน Line · '+line,body,`<button class="btn ghost" onclick="closeModal()">ปิด</button><button class="btn primary" id="lsSave">บันทึก</button>`);
+  setupCombo($('#lsModel'),$('#lsModelList'),models);
   $('#lsSave').onclick=async()=>{
     try{
+      const newModel=$('#lsModel').value.trim()||null;
       const updates=[];
       $('#modal').querySelectorAll('.oprow').forEach(r=>{
         const m=RAW.machines.find(x=>x.code===r.dataset.code); if(!m) return;
-        const status=r.querySelector('.lsStatus').value;
-        if(status!==m.status) updates.push({id:m.id,status});
+        const status=r.querySelector('.lsStatus').value; const patch={};
+        if(status!==m.status) patch.status=status;
+        if((m.model||null)!==newModel) patch.model=newModel;
+        if(Object.keys(patch).length) updates.push({id:m.id,patch});
       });
-      for(const u of updates) await sbUpdate('machines',u.id,{status:u.status});
-      closeModal(); await afterWrite(updates.length?('อัปเดต '+updates.length+' เครื่อง'):'ไม่มีการเปลี่ยนแปลง');
+      for(const u of updates) await sbUpdate('machines',u.id,u.patch);
+      closeModal(); await afterWrite(updates.length?('อัปเดต Line '+line):'ไม่มีการเปลี่ยนแปลง');
     }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
   };
 }
@@ -1659,7 +1782,8 @@ async function delDowntime(id){
 
 /* ---- wiring ---- */
 function wireFeatures(){
-  $('#btnNewWO')?.addEventListener('click',openNewWO);
+  $('#btnNewOrder')?.addEventListener('click',openNewOrder);
+  $('#orderTbl')?.addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.ord) openEditOrder(tr.dataset.ord); });
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
   $('#btnLogProblem')?.addEventListener('click',openLogProblem);
   $('#btnLogProd')?.addEventListener('click',openLogProduction);
@@ -1671,15 +1795,12 @@ function wireFeatures(){
     const rb=e.target.closest('.dtresolve'); if(rb){ if(confirm('ปิดปัญหานี้เป็นปกติ? ระบบจะคิดเวลาหยุดถึงตอนนี้')) resolveProblem(rb.dataset.dt); return; }
     const b=e.target.closest('.dtdel'); if(b&&confirm('ลบบันทึกปัญหานี้?')) delDowntime(b.dataset.dt);
   });
-  $('#fltText')?.addEventListener('input',()=>renderBoard());
-  $('#fltPri')?.addEventListener('change',()=>renderBoard());
-  $('#fltLate')?.addEventListener('change',()=>renderBoard());
+  $('#ordText')?.addEventListener('input',()=>renderDispatch());
   $('#macFilter')?.addEventListener('input',()=>renderMachineTbl());
   $('#btnAddEmp')?.addEventListener('click',openAddEmp);
   $('#peopleTbl')?.addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.emp) openEditEmp(tr.dataset.emp); });
   $('#overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#overlay').hidden) closeModal(); });
-  $('#board').addEventListener('click',e=>{ const b=e.target.closest('.asg'); if(b){ e.stopPropagation(); openAssign(b.dataset.asg);} });
   $('#machineTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.line) openLineDetail(tr.dataset.line); });
   $('#skillTbl').addEventListener('click',e=>{ const c=e.target.closest('.skill.edit'); if(c) cycleSkill(c.dataset.emp,c.dataset.col,parseInt(c.textContent,10)||0); });
   $('#btnAddPart')?.addEventListener('click',()=>openEditPart(null));
