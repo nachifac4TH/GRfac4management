@@ -32,7 +32,9 @@
   .brand .mark{display:flex;align-items:center;gap:9px}
   .brand .disc{width:26px;height:26px;border-radius:50%;background:
     repeating-conic-gradient(from 0deg,#3a4652 0deg 12deg,#4c5a68 12deg 24deg);
-    border:2px solid #5a6a78;box-shadow:inset 0 0 0 3px var(--bg-1)}
+    border:2px solid #5a6a78;box-shadow:inset 0 0 0 3px var(--bg-1);transition:.3s}
+  .brand .disc.live{background:repeating-conic-gradient(from 0deg,#2ea043 0deg 12deg,#3fb950 12deg 24deg);
+    border-color:#3fb950;box-shadow:inset 0 0 0 3px var(--bg-1),0 0 10px rgba(63,185,80,.65)}
   .brand h1{font-family:var(--disp);font-weight:700;font-size:19px;letter-spacing:.06em;line-height:1}
   .brand .sub{font-family:var(--mono);font-size:10px;color:var(--tx-faint);letter-spacing:.18em;margin-top:5px;text-transform:uppercase}
 
@@ -351,7 +353,7 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="mark">
-        <div class="disc"></div>
+        <div class="disc" id="brandDisc"></div>
         <div><h1>GRINDING</h1><div class="sub">Shop-Floor Console</div></div>
       </div>
     </div>
@@ -1017,6 +1019,7 @@ function setConn(){
   const c=$('#conn');
   c.className='conn '+(state.online?'live':'demo');
   $('#connTxt').textContent=state.online?'Live · Supabase':'Demo data';
+  const d=$('#brandDisc'); if(d) d.classList.toggle('live',!!state.online);
 }
 
 /* ---------------- Supabase data layer ---------------- */
