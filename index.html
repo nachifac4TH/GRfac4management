@@ -83,7 +83,8 @@
   .grid2>*{min-width:0}
   .panel{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
   .panel > h2{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-    padding:14px 16px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between}
+    padding:14px 16px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .panel > h2 .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--tx-faint);font-weight:400}
 
   .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;padding:16px}
@@ -195,15 +196,32 @@
   }
   @media(max-width:720px){
     .app{grid-template-columns:1fr}
-    .sidebar{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
-    .brand{border-bottom:none;border-right:1px solid var(--line-soft);flex:1}
-    .nav{display:flex;flex-wrap:wrap;padding:8px;width:100%;order:3;gap:4px}
+    .sidebar{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
+    .brand{border-bottom:none;border-right:1px solid var(--line-soft);flex:1;padding:12px 14px}
+    .brand h1{font-size:16px}
+    .nav{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px;width:100%;order:3;gap:6px}
     .nav .lbl,.shiftbox{display:none}
-    .nav a{margin:0;padding:8px 12px}
+    .nav a{margin:0;padding:8px 12px;white-space:nowrap;flex:none}
+    .nav a.on::before{display:none}
     .board{grid-template-columns:1fr}
-    .view{padding:16px}
-    .topbar{padding:13px 16px}
+    .view{padding:14px 12px 40px}
+    .topbar{padding:12px 14px;gap:10px}
+    .topbar .ttl{font-size:19px}
+    .topbar .ttl small{font-size:10.5px}
+    .clock .t{font-size:15px} .clock .d{font-size:10px}
     .topright{gap:10px}
+    .kpis{grid-template-columns:repeat(2,1fr);gap:10px}
+    .tbl th,.tbl td{white-space:nowrap}
+    .tbl th{padding:9px 12px} .tbl td{padding:10px 12px}
+    .modal{max-width:none;margin:0 8px}
+    .overlay{padding:12px}
+    .fltbar{gap:8px}
+    #fltText,#ordText{min-width:130px;max-width:none;flex:1}
+  }
+  @media(max-width:430px){
+    .kpis{grid-template-columns:1fr}
+    .brand .sub{display:none}
+    .topbar .ttl{font-size:17px}
   }
   /* ---- add/edit buttons, toolbar ---- */
   .addbtn{font-family:var(--mono);font-size:11px;letter-spacing:.05em;background:var(--cool-bg);color:var(--cool);
@@ -394,10 +412,10 @@
       </div>
       <div class="panel">
         <h2>แผนงานราย Order <span class="tag">Model · ลูกค้า · จำนวน · ผลิตแล้ว</span></h2>
-        <table class="tbl" id="orderTbl">
+        <div class="tscroll"><table class="tbl" id="orderTbl">
           <thead><tr><th>Model</th><th>ลูกค้า</th><th>Line</th><th>เป้า (ชิ้น)</th><th>ผลิตแล้ว</th><th>คงเหลือ</th><th>ความคืบหน้า</th><th>ครบกำหนด</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
         <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้ไข/ลบ Order · ยอด "ผลิตแล้ว" ดึงจากบันทึกผลผลิตตาม Model อัตโนมัติ</div>
       </div>
     </section>
@@ -405,10 +423,10 @@
     <section class="view" id="v-problem" hidden>
       <div class="panel">
         <h2>บันทึกปัญหา / หยุดเดินเครื่อง <span class="tag">คิดเป็น Downtime</span><button class="addbtn" id="btnLogProblem" style="margin-left:auto">+ บันทึกปัญหา</button></h2>
-        <table class="tbl" id="downtimeTbl">
+        <div class="tscroll"><table class="tbl" id="downtimeTbl">
           <thead><tr><th>เริ่ม</th><th>Model</th><th>Line</th><th>เครื่องจักร</th><th>สาเหตุ</th><th>สถานะ / เวลา</th><th></th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
         <div class="hint">ปัญหาที่บันทึกจะรวมเข้ากราฟ Pareto (Control Room) และการวิเคราะห์คอขวด "ซ่อมบ่อย" อัตโนมัติ · เครื่องจักรไม่บังคับ (เช่นตอน Changeover)</div>
       </div>
     </section>
@@ -416,26 +434,26 @@
     <section class="view" id="v-machines" hidden>
       <div class="panel">
         <h2>ทะเบียนเครื่องจักร <span class="tag">แผนกเจียร</span><input id="macFilter" class="fltinput" placeholder="กรอง Line/Model/ประเภท…" style="margin-left:auto;max-width:220px"><button class="addbtn" id="btnAddMachine" style="margin-left:8px">+ เพิ่มเครื่อง</button></h2>
-        <table class="tbl" id="machineTbl">
+        <div class="tscroll"><table class="tbl" id="machineTbl">
           <thead><tr><th>Line</th><th>Model กำลังผลิต</th><th>สถานะ</th><th>OEE เฉลี่ย</th><th>เครื่องจักรใน Line</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </section>
 
     <section class="view" id="v-production" hidden>
       <div class="panel">
-        <h2>บันทึกผลผลิตประจำกะ <span class="tag">ราย Line / วัน / กะ</span></h2>
+        <h2>บันทึกผลผลิตประจำกะ <span class="tag">ราย Line / วัน / กะ</span><button class="addbtn" id="btnSaveAllProd" style="margin-left:auto">✓ บันทึกทั้งหมดที่กรอก</button></h2>
         <div class="fltbar">
           <label class="fltchk">วันที่ <input id="pgDate" type="date" class="fltinput" style="margin-left:6px"></label>
           <label class="fltchk">กะ <select id="pgShiftSel" class="fltinput" style="margin-left:6px"></select></label>
           <input id="pgSearch" class="fltinput" placeholder="ค้นหา Line เช่น IG405">
           <span class="fltcount" id="pgSummary"></span>
         </div>
-        <table class="tbl" id="prodGrid">
+        <div class="tscroll"><table class="tbl" id="prodGrid">
           <thead><tr><th>Line</th><th>Model</th><th>ดี</th><th>เสีย</th><th></th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
         <div class="hint">พนักงานประจำ Line กรอกยอดของตัวเองแล้วกด ✓ · บันทึกซ้ำ = อัปเดต (ราย Line/วัน/กะ) · แถวเขียว = บันทึกแล้ว</div>
       </div>
     </section>
@@ -443,14 +461,14 @@
     <section class="view" id="v-people" hidden>
       <div class="panel mb18">
         <h2>บุคลากรในแผนก <span class="tag">กะ A</span><button class="addbtn" id="btnAddEmp">+ เพิ่มช่าง</button></h2>
-        <table class="tbl" id="peopleTbl">
+        <div class="tscroll"><table class="tbl" id="peopleTbl">
           <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>กะ</th><th>งานที่ถืออยู่</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
       <div class="panel">
         <h2>Skill Matrix <span class="tag">ระดับความชำนาญต่อประเภทเครื่อง</span></h2>
-        <table class="tbl" id="skillTbl"><thead></thead><tbody></tbody></table>
+        <div class="tscroll"><table class="tbl" id="skillTbl"><thead></thead><tbody></tbody></table></div>
         <div class="legend">
           <span><b class="skill sk0">0</b> ทำไม่ได้</span>
           <span><b class="skill sk1">1</b> ทำได้ (มีคนคุม)</span>
@@ -464,10 +482,10 @@
     <section class="view" id="v-parts" hidden>
       <div class="panel">
         <h2>ทะเบียนชิ้นส่วนตลับลูกปืน <span class="tag">Part master + routing</span><button class="addbtn" id="btnAddPart">+ เพิ่ม Part</button></h2>
-        <table class="tbl" id="partsTbl">
+        <div class="tscroll"><table class="tbl" id="partsTbl">
           <thead><tr><th>Part</th><th>ชนิด / ชิ้นส่วน</th><th>ขนาด d×D×B</th><th>Class</th><th>เป้า Ra / กลม (µm)</th><th>ขั้นตอน (routing)</th><th></th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
         <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้สเปก · ปุ่ม <b>ขั้นตอน</b> เพื่อจัดลำดับงานเจียร (routing)</div>
       </div>
     </section>
@@ -483,18 +501,18 @@
         </div>
         <div class="panel">
           <h2>ความสามารถกระบวนการ <span class="tag">Cpk ต่อรุ่น</span></h2>
-          <table class="tbl" id="cpkTbl">
+          <div class="tscroll"><table class="tbl" id="cpkTbl">
             <thead><tr><th>รุ่น</th><th>n</th><th>Cpk กลม</th><th>Cpk Ra</th></tr></thead><tbody></tbody>
-          </table>
+          </table></div>
           <div class="hint">Cpk ≥ 1.33 = ดี · 1.0–1.33 = เฝ้าระวัง · &lt; 1.0 = ไม่ผ่าน (ต้องมีตัวอย่าง ≥ 2)</div>
         </div>
       </div>
       <div class="panel" style="margin-top:16px">
         <h2>ผลตรวจล่าสุด <span class="tag" id="qcRecentTag">roundness / Ra / เสียง</span></h2>
-        <table class="tbl" id="qcTbl">
+        <div class="tscroll"><table class="tbl" id="qcTbl">
           <thead><tr><th>เวลา</th><th>รุ่น</th><th>Lot</th><th>Line</th><th>ขั้น</th><th>กลม</th><th>Ra</th><th>เสียง</th><th>ผล</th><th></th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </section>
   </main>
@@ -945,6 +963,29 @@ async function saveProdRow(ln){
     await afterWrite('บันทึก '+ln+' แล้ว');
   }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
 }
+async function saveAllProd(){
+  if(!live()) return;
+  const date=$('#pgDate').value, shiftId=$('#pgShiftSel').value||null;
+  if(!date) return toast('เลือกวันที่','err');
+  const rows=[...document.querySelectorAll('#prodGrid tbody tr[data-line]')];
+  const items=[];
+  rows.forEach(tr=>{
+    const good=parseInt(tr.querySelector('.pgG').value,10)||0;
+    const scrap=parseInt(tr.querySelector('.pgS').value,10)||0;
+    if(good+scrap<=0) return;
+    items.push({ln:tr.dataset.line,good,scrap,model:tr.querySelector('.pgM').value.trim()||null});
+  });
+  if(!items.length) return toast('ยังไม่มีแถวที่กรอกยอด','err');
+  const occurred_on=new Date(date+'T12:00:00').toISOString();
+  try{
+    for(const it of items){
+      const row={machine_id:null,line:it.ln,prod_date:date,shift_id:shiftId,model:it.model,good_qty:it.good,scrap_qty:it.scrap,run_min:480,planned_min:480,occurred_on};
+      const ex=(RAW.production||[]).find(p=>p.line===it.ln&&p.prod_date===date&&(p.shift_id||'')===(shiftId||''));
+      if(ex) await sbUpdate('production_logs',ex.id,row); else await sbInsert('production_logs',row);
+    }
+    await afterWrite('บันทึก '+items.length+' Line แล้ว');
+  }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+}
 function renderBottleneck(){
   const box=$('#bnPanel'); if(!box) return;
   const info=state.bottleneckInfo||{}; const cells=state.bottleneck||[];
@@ -1192,7 +1233,10 @@ async function loadFromSupabase(){
 async function boot(){
   if(sb){
     try{ await loadFromSupabase(); state.online=true; }
-    catch(e){ console.error('Supabase error — demo data:',e); Object.assign(state,structuredClone(FALLBACK)); state.online=false; }
+    catch(e){ const msg=(e&&(e.message||e.details||e.hint))||(typeof e==='string'?e:JSON.stringify(e));
+      console.error('Supabase error — demo data:',msg,e);
+      setTimeout(()=>toast('โหลดข้อมูลไม่ได้: '+msg,'err'),400);
+      Object.assign(state,structuredClone(FALLBACK)); state.online=false; }
   }else{
     Object.assign(state,structuredClone(FALLBACK)); state.online=false;
   }
@@ -1841,6 +1885,7 @@ function wireFeatures(){
   $('#pgShiftSel')?.addEventListener('change',()=>renderProduction());
   $('#pgSearch')?.addEventListener('input',()=>renderProduction());
   $('#prodGrid')?.addEventListener('click',e=>{ const b=e.target.closest('.pgSaveBtn'); if(b) saveProdRow(b.dataset.line); });
+  $('#btnSaveAllProd')?.addEventListener('click',saveAllProd);
   $('#btnLogQC')?.addEventListener('click',openLogQuality);
   $('#qcTbl')?.addEventListener('click',e=>{ const b=e.target.closest('.qcdel'); if(b&&confirm('ลบผลตรวจนี้?')) delQuality(b.dataset.qc); });
   $('#qcLotSearch')?.addEventListener('input',()=>renderQcRecent());
