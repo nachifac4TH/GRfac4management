@@ -398,7 +398,7 @@
             <div class="pareto" id="paretoBox"></div>
           </div>
           <div class="panel">
-            <h2>คิวงานตามขั้นตอน (WIP) <span class="tag">คอขวดต่อขั้นตอน</span></h2>
+            <h2>ยอดผลิตวันนี้ · Top Line <span class="tag">ชิ้นดี/วัน</span></h2>
             <div class="wip"><div class="wipbar" id="wipBar"></div></div>
           </div>
         </div>
@@ -653,13 +653,17 @@ function renderPareto(){
   });
 }
 function renderWip(){
-  const bar=$('#wipBar');bar.innerHTML='';
-  const data=state.opWip||[];
-  const max=Math.max(1,...data.map(w=>w.count));
-  data.forEach(w=>{
-    const hot=w.count===max&&max>0;
-    const col=el('div','col'+(hot?' hot':''));
-    col.innerHTML=`<div class="b" style="height:${18+w.count/max*46}px"><span>${w.count}</span></div><div class="lb">${w.name}</div>`;
+  const bar=$('#wipBar'); if(!bar) return; bar.innerHTML='';
+  const today=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const byLine={};
+  (RAW.production||[]).forEach(p=>{ if(p.prod_date!==today) return; const ln=p.line||p.machines?.line; if(!ln) return; byLine[ln]=(byLine[ln]||0)+(p.good_qty||0); });
+  const arr=Object.entries(byLine).map(([line,good])=>({line,good})).sort((a,b)=>b.good-a.good).slice(0,8);
+  if(!arr.length){ bar.innerHTML='<div style="color:var(--tx-faint);padding:18px;font-size:12px">ยังไม่มีบันทึกผลผลิตวันนี้</div>'; return; }
+  const max=Math.max(1,...arr.map(w=>w.good));
+  arr.forEach((w,i)=>{
+    const lbl=w.good>=1000?(w.good/1000).toFixed(1)+'k':w.good;
+    const col=el('div','col'+(i===0?' hot':''));
+    col.innerHTML=`<div class="b" style="height:${18+w.good/max*46}px"><span>${lbl}</span></div><div class="lb">${w.line}</div>`;
     bar.appendChild(col);
   });
 }
