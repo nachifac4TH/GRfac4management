@@ -406,7 +406,7 @@
     </section>
 
     <section class="view" id="v-dispatch" hidden>
-      <div class="toolbar"><button class="addbtn" id="btnNewOrder">+ เพิ่ม Order ตามแผน</button></div>
+      <div class="toolbar"><button class="addbtn" id="btnNewOrder">+ เพิ่ม Order ตามแผน</button><button class="addbtn" id="btnImportPlan" style="margin-left:8px">⬇ นำเข้าแผน (วาง Excel)</button></div>
       <div class="panel" id="targetPanel" style="margin-bottom:16px"></div>
       <div class="fltbar">
         <input id="ordText" class="fltinput" placeholder="ค้นหา Model / ลูกค้า / Line…">
@@ -415,7 +415,7 @@
       <div class="panel">
         <h2>แผนงานราย Order <span class="tag">Model · ลูกค้า · จำนวน · ผลิตแล้ว</span></h2>
         <div class="tscroll"><table class="tbl" id="orderTbl">
-          <thead><tr><th>Model</th><th>ลูกค้า</th><th>Line</th><th>เป้า (ชิ้น)</th><th>ผลิตแล้ว</th><th>คงเหลือ</th><th>ความคืบหน้า</th><th>ครบกำหนด</th></tr></thead>
+          <thead><tr><th>Model</th><th>แผนเดือน</th><th>GR Stock</th><th>ที่ต้องผลิต</th><th>ผลิตแล้ว</th><th>คงเหลือ</th><th>ความคืบหน้า</th><th>ครบกำหนด</th></tr></thead>
           <tbody></tbody>
         </table></div>
         <div class="hint"><span class="k">คลิกแถว</span> เพื่อแก้ไข/ลบ Order · ยอด "ผลิตแล้ว" ดึงจากบันทึกผลผลิตตาม Model อัตโนมัติ</div>
@@ -890,17 +890,16 @@ function fmtDur(m){ m=Math.round(m||0);
   const d=Math.floor(m/1440), h=Math.floor((m%1440)/60); return d+' วัน'+(h?' '+h+' ชม.':''); }
 function renderDispatch(){
   const tp=$('#targetPanel'); if(!tp) return;
-  const t=state.orderTotals||{ordered:0,produced:0,target:0,lateCount:0};
-  const pct=t.target?Math.min(100,Math.round(100*t.produced/t.target)):0;
-  const opct=t.target?Math.min(100,Math.round(100*t.ordered/t.target)):0;
+  const t=state.orderTotals||{plan:0,target:0,produced:0,manualTarget:0,lateCount:0};
+  const denom=t.target||0;
+  const pct=denom?Math.min(100,Math.round(100*t.produced/denom)):0;
   tp.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <span style="font-family:var(--disp);font-size:15px;font-weight:600">เป้าหลัก (Main Target)</span>
-      <button class="addbtn" id="btnSetTarget" style="margin-left:auto">ตั้งเป้าหลัก</button></div>
-    <div style="font-family:var(--disp);font-size:30px;font-weight:700">${fmtInt(t.produced)} <small style="font-size:15px;color:var(--tx-faint)">/ ${fmtInt(t.target)} ชิ้น</small></div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--tx-dim);margin:6px 0 8px">ผลิตแล้ว ${pct}% ของเป้า · วางแผนไว้ ${fmtInt(t.ordered)} (${opct}%) · ${t.lateCount?`<span style="color:var(--down)">Order ล่าช้า ${t.lateCount}</span>`:'ไม่มี Order ล่าช้า'}</div>
+      <span style="font-family:var(--disp);font-size:15px;font-weight:600">แผนผลิต Grinding · ที่ต้องผลิต</span>
+      <button class="addbtn" id="btnSetTarget" style="margin-left:auto">ตั้งเป้าหลัก (ถ้ามี)</button></div>
+    <div style="font-family:var(--disp);font-size:30px;font-weight:700">${fmtInt(t.produced)} <small style="font-size:15px;color:var(--tx-faint)">/ ${fmtInt(denom)} ชิ้น</small></div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--tx-dim);margin:6px 0 8px">ผลิตแล้ว ${pct}% ของที่ต้องผลิต · แผนรวม ${fmtInt(t.plan)} − GR Stock${t.manualTarget?` · เป้าหลักที่ตั้ง ${fmtInt(t.manualTarget)}`:''} · ${t.lateCount?`<span style="color:var(--down)">Order ล่าช้า ${t.lateCount}</span>`:'ไม่มี Order ล่าช้า'}</div>
     <div class="bar" style="height:10px"><i style="width:${pct}%;background:${pct>=80?'var(--run)':'var(--idle)'}"></i></div>`;
   $('#btnSetTarget')&&($('#btnSetTarget').onclick=setMainTarget);
-  // orders table
   const tb=$('#orderTbl tbody'); if(!tb) return; tb.innerHTML='';
   const q=($('#ordText')&&$('#ordText').value||'').trim().toLowerCase();
   const list=q?state.orders.filter(o=>`${o.model} ${o.customer} ${o.line}`.toLowerCase().includes(q)):state.orders;
@@ -911,9 +910,9 @@ function renderDispatch(){
     const col=o.pct>=100?'var(--run)':o.pct>=50?'var(--idle)':'var(--down)';
     const tr=el('tr','clickable'); tr.dataset.ord=o.id; tr.title='คลิกเพื่อแก้ไข/ลบ';
     tr.innerHTML=`<td style="font-family:var(--mono);font-weight:600">${o.model}</td>
-      <td>${o.customer}</td>
-      <td style="font-family:var(--mono);color:var(--cool)">${o.line||'—'}</td>
-      <td style="font-family:var(--mono)">${fmtInt(o.qty)}</td>
+      <td style="font-family:var(--mono)">${fmtInt(o.plan)}</td>
+      <td style="font-family:var(--mono);color:var(--tx-dim)">${fmtInt(o.grStock)}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:var(--cool)">${fmtInt(o.target)}</td>
       <td style="font-family:var(--mono);color:var(--run)">${fmtInt(o.produced)}</td>
       <td style="font-family:var(--mono);color:var(--tx-dim)">${fmtInt(o.remaining)}</td>
       <td style="min-width:110px"><div class="bar" style="height:7px;margin-bottom:3px"><i style="width:${o.pct}%;background:${col}"></i></div><span style="font-family:var(--mono);font-size:11px;color:${col}">${o.pct}%</span></td>
@@ -1180,15 +1179,19 @@ function buildState(){
   const nowT=Date.now();
   state.orders=(RAW.orders||[]).map(o=>{
     const model=o.model||((o.part_numbers?.part_no||'').replace(/-(IR|OR)$/i,''))||'—';
-    const produced=prodByModel[model]||0, qty=o.quantity||0;
-    return {id:o.id,wo:o.wo_number,model,customer:o.customer||'—',qty,produced,
-      remaining:Math.max(0,qty-produced),pct:qty?Math.min(100,Math.round(100*produced/qty)):0,
+    const plan=(o.plan_qty!=null?o.plan_qty:(o.quantity||0));
+    const grStock=o.gr_stock||0;
+    const target=Math.max(0,plan-grStock);          // ที่ GR ต้องทำ = แผน − สต๊อก
+    const produced=prodByModel[model]||0;
+    return {id:o.id,wo:o.wo_number,model,customer:o.customer||'—',plan,grStock,target,produced,
+      remaining:Math.max(0,target-produced),pct:target?Math.min(100,Math.round(100*produced/target)):(produced>0?100:0),
       line:o.line||'',due:o.due_at,note:o.note||'',status:o.status,priority:o.priority||3,
-      late:!!(o.due_at&&new Date(o.due_at).getTime()<nowT&&produced<qty)};
+      late:!!(o.due_at&&new Date(o.due_at).getTime()<nowT&&produced<target)};
   }).sort((a,b)=>(a.priority-b.priority)||a.model.localeCompare(b.model));
-  state.orderTotals={ordered:state.orders.reduce((s,o)=>s+o.qty,0),
+  state.orderTotals={plan:state.orders.reduce((s,o)=>s+o.plan,0),
+    target:state.orders.reduce((s,o)=>s+o.target,0),
     produced:(RAW.production||[]).reduce((s,p)=>s+(p.good_qty||0),0),
-    target:state.mainTarget,lateCount:state.orders.filter(o=>o.late).length};
+    manualTarget:state.mainTarget,lateCount:state.orders.filter(o=>o.late).length};
   // Operation WIP — คอขวดตามขั้นตอนของสายผลิต (นับงานที่ยังไม่เสร็จ ตามขั้นตอนปัจจุบัน)
   const opOrder={}, opActive={};
   RAW.operations.forEach(o=>{ if(!(o.op_name in opOrder)||o.seq<opOrder[o.op_name]) opOrder[o.op_name]=o.seq; });
@@ -1225,7 +1228,7 @@ async function loadFromSupabase(){
     sb.from('downtime_reasons').select('id,name').order('name'),
     sb.from('production_logs').select('id,machine_id,shift_id,occurred_on,prod_date,good_qty,scrap_qty,run_min,planned_min,model,line,machines(code,line,machine_types(name)),shifts(name)').order('occurred_on',{ascending:false}).limit(2000),
     sb.from('quality_checks').select('id,occurred_on,part_number_id,machine_id,lot_no,op_name,roundness,ra,anderon,result,defect,part_numbers(part_no),machines(code,line,machine_types(name))').order('occurred_on',{ascending:false}).limit(500),
-    sb.from('work_orders').select('id,wo_number,model,quantity,customer,line,due_at,note,status,priority,part_number_id,part_numbers(part_no)').order('due_at'),
+    sb.from('work_orders').select('id,wo_number,model,quantity,plan_qty,gr_stock,customer,line,due_at,note,status,priority,part_number_id,part_numbers(part_no)').order('due_at'),
     sb.from('app_settings').select('key,value'),
   ];
   const [mt,mac,emp,sk,jb,dt,pt,sh,po,rs,pl,qc,wo,st]=await Promise.all(q);
@@ -1320,6 +1323,55 @@ function nextWO(){ let max=0; RAW.jobs.forEach(j=>{const n=parseInt(String(j.wor
   return 'WO-'+String(max+1).padStart(4,'0'); }
 function localDatetime(d){ return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
 
+function parsePlanRows(text){
+  const rows=[];
+  (text||'').split('\n').forEach(line=>{
+    let l=line.trim(); if(!l) return;
+    let parts=l.split('\t');
+    if(parts.length<2) parts=l.split(',');
+    if(parts.length<2) parts=l.split(/\s{2,}/);
+    if(parts.length<2) parts=l.split(/\s+/);
+    parts=parts.map(s=>s.trim());
+    const model=parts[0];
+    const plan=parseInt((parts[1]||'').replace(/[,\s]/g,''),10);
+    const stock=parseInt((parts[2]||'0').replace(/[,\s]/g,''),10)||0;
+    if(model && !isNaN(plan) && plan>0) rows.push({model,plan,stock});
+  });
+  return rows;
+}
+function openImportPlan(){
+  if(!live()) return;
+  const body=`
+   <div class="field"><label>วางข้อมูลจาก Excel — คอลัมน์ Model · แผนเดือน · GR Stock</label>
+     <textarea id="impText" rows="9" style="width:100%;background:var(--bg-2);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;outline:none;resize:vertical" placeholder="A-6001&#9;15400&#9;14396
+B-6001&#9;30000&#9;77797
+A-6004&#9;45080&#9;92456"></textarea></div>
+   <div class="hint2">คัดลอก 3 คอลัมน์ (Model · AUG'26 PLAN · GR Stock) จาก Excel มาวางได้เลย · GR Stock เว้นได้ (=0) · <b>Model ซ้ำ = อัปเดต</b> ไม่สร้างซ้ำ</div>
+   <div class="hint2" id="impPreview" style="color:var(--cool)"></div>`;
+  openModal('นำเข้าแผน · Bulk Import',body,`<button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn primary" id="impSave">นำเข้า</button>`);
+  const upd=()=>{ const r=parsePlanRows($('#impText').value); $('#impPreview').innerHTML=r.length?`พร้อมนำเข้า <b>${r.length}</b> รายการ`:''; };
+  $('#impText').addEventListener('input',upd);
+  $('#impSave').onclick=async()=>{
+    const rows=parsePlanRows($('#impText').value);
+    if(!rows.length) return toast('ไม่พบข้อมูล (ต้องมี Model + แผน อย่างน้อย)','err');
+    try{
+      let n=1000; (RAW.orders||[]).forEach(o=>{const x=parseInt(String(o.wo_number||'').replace(/\D/g,''),10); if(x>n)n=x;});
+      const toInsert=[], toUpdate=[];
+      const seen={};
+      rows.forEach(r=>{
+        if(seen[r.model]) return; seen[r.model]=1;
+        const target=Math.max(0,r.plan-r.stock);
+        const ex=(RAW.orders||[]).find(o=>(o.model||'')===r.model);
+        if(ex) toUpdate.push({id:ex.id,patch:{plan_qty:r.plan,gr_stock:r.stock,quantity:target}});
+        else { n++; toInsert.push({wo_number:'WO-'+n,status:'in_progress',priority:2,customer:'',model:r.model,plan_qty:r.plan,gr_stock:r.stock,quantity:target}); }
+      });
+      if(toInsert.length){ const {error}=await sb.from('work_orders').insert(toInsert); if(error) throw error; }
+      for(const u of toUpdate) await sbUpdate('work_orders',u.id,u.patch);
+      closeModal(); await afterWrite('นำเข้าแผน '+(toInsert.length+toUpdate.length)+' รายการ (ใหม่ '+toInsert.length+' · อัปเดต '+toUpdate.length+')');
+    }catch(e){ toast('ผิดพลาด: '+(e.message||e),'err'); }
+  };
+}
+
 /* ---- Orders (Dispatch แบบใหม่) ---- */
 function nextOrderNo(){ let max=1000; (RAW.orders||[]).forEach(o=>{const n=parseInt(String(o.wo_number||'').replace(/\D/g,''),10); if(n>max)max=n;}); return 'WO-'+String(max+1); }
 async function setMainTarget(){
@@ -1336,11 +1388,13 @@ function orderFormBody(o){
   return `
    <div class="field row2"><div><label>Model</label><div class="combo"><input id="oModel" autocomplete="off" value="${o.model||''}" placeholder="พิมพ์ค้นหา เช่น 6001"><div class="combo-list" id="oModelList" hidden></div></div></div>
      <div><label>ลูกค้า</label><input id="oCust" value="${(o.customer||'').replace(/"/g,'&quot;')}" placeholder="เช่น Mitsubishi"></div></div>
-   <div class="field row2"><div><label>จำนวน (ชิ้น)</label><input id="oQty" type="number" min="0" value="${o.qty||0}"></div>
-     <div><label>Line (ไม่บังคับ)</label><div class="combo"><input id="oLine" autocomplete="off" value="${o.line||''}" placeholder="เช่น IG401"><div class="combo-list" id="oLineList" hidden></div></div></div></div>
-   <div class="field row2"><div><label>ความสำคัญ</label><select id="oPri">${[1,2,3].map(p=>`<option value="${p}" ${p===(o.priority||2)?'selected':''}>P${p}${p===1?' สูงสุด':''}</option>`).join('')}</select></div>
-     <div><label>ครบกำหนด</label><input id="oDue" type="date" value="${o.due?new Date(o.due).toISOString().slice(0,10):''}"></div></div>
-   <div class="field"><label>หมายเหตุ</label><input id="oNote" value="${(o.note||'').replace(/"/g,'&quot;')}" placeholder="เช่น งานเร่ง · ล็อตพิเศษ"></div>`;
+   <div class="field row2"><div><label>แผนเดือน (ชิ้น)</label><input id="oPlan" type="number" min="0" value="${o.plan||0}"></div>
+     <div><label>GR Stock (มีอยู่)</label><input id="oStock" type="number" min="0" value="${o.grStock||0}"></div></div>
+   <div class="hint2">ที่ต้องผลิต = แผน − GR Stock (ถ้าสต๊อกพอ = 0)</div>
+   <div class="field row2"><div><label>Line (ไม่บังคับ)</label><div class="combo"><input id="oLine" autocomplete="off" value="${o.line||''}" placeholder="เช่น IG401"><div class="combo-list" id="oLineList" hidden></div></div></div>
+     <div><label>ความสำคัญ</label><select id="oPri">${[1,2,3].map(p=>`<option value="${p}" ${p===(o.priority||2)?'selected':''}>P${p}${p===1?' สูงสุด':''}</option>`).join('')}</select></div></div>
+   <div class="field row2"><div><label>ครบกำหนด</label><input id="oDue" type="date" value="${o.due?new Date(o.due).toISOString().slice(0,10):''}"></div>
+     <div><label>หมายเหตุ</label><input id="oNote" value="${(o.note||'').replace(/"/g,'&quot;')}" placeholder="เช่น งานเร่ง"></div></div>`;
 }
 function wireOrderForm(){
   const models=[...new Set(RAW.parts.map(p=>p.part_no.replace(/-(IR|OR)$/i,'')))].sort();
@@ -1348,11 +1402,13 @@ function wireOrderForm(){
   setupCombo($('#oLine'),$('#oLineList'),allLines());
 }
 function readOrderForm(){
-  const model=$('#oModel').value.trim(), qty=parseInt($('#oQty').value,10)||0;
+  const model=$('#oModel').value.trim();
+  const plan=parseInt($('#oPlan').value,10)||0, grStock=parseInt($('#oStock').value,10)||0;
   if(!model){ toast('เลือก Model','err'); return null; }
-  if(qty<=0){ toast('กรอกจำนวน','err'); return null; }
+  if(plan<=0){ toast('กรอกแผนเดือน','err'); return null; }
   const dv=$('#oDue').value;
-  return {model,quantity:qty,customer:$('#oCust').value.trim()||'',line:$('#oLine').value.trim()||null,
+  return {model,plan_qty:plan,gr_stock:grStock,quantity:Math.max(0,plan-grStock),
+    customer:$('#oCust').value.trim()||'',line:$('#oLine').value.trim()||null,
     due_at:dv?new Date(dv+'T17:00:00').toISOString():null,priority:parseInt($('#oPri').value,10),note:$('#oNote').value.trim()||null};
 }
 function openNewOrder(){
@@ -1884,6 +1940,7 @@ async function delDowntime(id){
 /* ---- wiring ---- */
 function wireFeatures(){
   $('#btnNewOrder')?.addEventListener('click',openNewOrder);
+  $('#btnImportPlan')?.addEventListener('click',openImportPlan);
   $('#orderTbl')?.addEventListener('click',e=>{ const tr=e.target.closest('tr.clickable'); if(tr&&tr.dataset.ord) openEditOrder(tr.dataset.ord); });
   $('#btnAddMachine')?.addEventListener('click',openAddMachine);
   $('#btnLogProblem')?.addEventListener('click',openLogProblem);
